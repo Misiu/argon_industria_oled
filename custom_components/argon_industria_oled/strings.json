@@ -14,7 +14,7 @@
       }
     },
     "error": {
-      "i2c_disabled": "I²C is not enabled on this system.",
+      "i2c_disabled": "I²C is not enabled on this system. For Home Assistant OS, install the HassOS I2C Configurator add-on: https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167",
       "display_not_found": "The OLED display was not detected at the expected address.",
       "welcome_failed": "The display could not show the welcome message.",
       "sensor_required": "Select a sensor entity when using the sensor option.",
