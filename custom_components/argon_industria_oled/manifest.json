@@ -3,8 +3,9 @@
   "name": "Argon Industria V5 OLED",
   "codeowners": ["@Misiu"],
   "config_flow": true,
+  "dependencies": [],
   "documentation": "https://github.com/Misiu/Argon-Industria-V5-OLED",
-  "iot_class": "assumed_state",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/Misiu/Argon-Industria-V5-OLED/issues",
   "requirements": [
     "smbus-cffi==0.5.1",
