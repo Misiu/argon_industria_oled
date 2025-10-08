@@ -26,7 +26,7 @@ jobs:
         uses: svenstaro/upload-release-action@2.11.2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: /home/runner/work/argon40/argon40/custom_components/argon40/argon40.zip
+          file: /home/runner/work/argon_industria_oled/argon_industria_oled/custom_components/argon_industria_oled/argon_industria_oled.zip
           asset_name: argon40.zip
           tag: ${{ github.ref }}
           overwrite: true
