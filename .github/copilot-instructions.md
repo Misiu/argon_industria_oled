@@ -4,8 +4,9 @@ This is a Home Assistant custom integration for the Argon Industria OLED module 
 
 ## Project Overview
 - **Technology**: Python 3.12, Home Assistant integration
-- **Hardware**: Argon Industria OLED module via I²C (address 0x3C on /dev/i2c-1)
+- **Hardware**: Argon Industria OLED module via I²C (I²C address 0x3C, data control byte 0x6A, on /dev/i2c-1 or /dev/i2c-0)
 - **Dependencies**: `smbus-cffi` (I²C communication), `Pillow` (image rendering)
+- **Based on**: [Argon40 ArgonOne Script](https://github.com/okunze/Argon40-ArgonOne-Script/blob/master/source/scripts/argoneonoled.py)
 
 ## Key Coding Standards
 - Follow [PEP 8](https://peps.python.org/pep-0008/) style guidelines
