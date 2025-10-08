@@ -15,7 +15,7 @@ This repository contains a custom [Home Assistant](https://www.home-assistant.io
 ## Installation via HACS
 1. In Home Assistant, open **HACS → Integrations**.
 2. Click the three-dot menu and choose **Custom repositories**.
-3. Enter `https://github.com/Argon-Industria/Argon-Industria-V5-OLED` as the repository URL and select **Integration** as the category.
+3. Enter `https://github.com/Misiu/Argon-Industria-V5-OLED` as the repository URL and select **Integration** as the category.
 4. Add the repository, then search for “Argon Industria OLED” and install it.
 5. Restart Home Assistant when prompted.
 
