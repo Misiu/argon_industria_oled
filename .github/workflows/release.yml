@@ -1,0 +1,32 @@
+name: Release actions
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release_zip_file:
+    name: Prepare release asset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Get version
+        id: version
+        uses: home-assistant/actions/helpers/version@master
+      
+      - name: ZIP files
+        run: |
+          sed -i 's/v0.0.0/${{ steps.version.outputs.version }}/' custom_components/argon_industria_oled/manifest.json
+          cd custom_components/argon_industria_oled
+          zip ../../argon_industria_oled.zip -r ./
+
+      - name: Upload zip to release
+        uses: svenstaro/upload-release-action@2.11.2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: /home/runner/work/argon40/argon40/custom_components/argon40/argon40.zip
+          asset_name: argon40.zip
+          tag: ${{ github.ref }}
+          overwrite: true
