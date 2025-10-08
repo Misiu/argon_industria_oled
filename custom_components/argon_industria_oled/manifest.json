@@ -1,5 +1,5 @@
 {
-  "domain": "argon_oled",
+  "domain": "argon_industria_oled",
   "name": "Argon Industria V5 OLED",
   "codeowners": ["@Misiu"],
   "config_flow": true,
