@@ -1,4 +1,4 @@
-# Argon Industria OLED Home Assistant Integration
+# WIP Argon Industria OLED Home Assistant Integration
 
 This repository contains a custom [Home Assistant](https://www.home-assistant.io/) integration that drives the Argon Industria OLED module connected to a Raspberry Pi 5 via I²C. The integration detects the display, renders useful status information, and keeps the content up to date directly from Home Assistant.
 
