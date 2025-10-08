@@ -12,6 +12,13 @@ This repository contains a custom [Home Assistant](https://www.home-assistant.io
 - Argon Industria OLED module (55mm × 90mm) — see the [datasheet](https://files.waveshare.com/wiki/ARGON-ONE-V5-OLED-Module/FOR_PRINT_ARGON_INDUSTRIA_OLED_55mmx90mm_20241219.pdf).
 - Raspberry Pi 5 with the module attached to the 40-pin header and I²C enabled.
 
+### Enabling I²C
+The integration requires I²C to be enabled on your Raspberry Pi. For Home Assistant OS users, the easiest way to enable I²C is to install the **HassOS I2C Configurator** add-on:
+- Add-on repository: https://github.com/adamoutler/HassOSConfigurator
+- Community discussion: https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167
+
+The integration will automatically detect the I²C bus (trying bus 1 first, then bus 0 for older Raspberry Pi models).
+
 ## Installation via HACS
 1. In Home Assistant, open **HACS → Integrations**.
 2. Click the three-dot menu and choose **Custom repositories**.
@@ -23,7 +30,7 @@ This repository contains a custom [Home Assistant](https://www.home-assistant.io
 1. Navigate to **Settings → Devices & Services** and click **Add Integration**.
 2. Search for **Argon Industria OLED**.
 3. The config flow will:
-   - Verify that `/dev/i2c-1` is available.
+   - Auto-detect the I²C bus (tries `/dev/i2c-1` first, then `/dev/i2c-0` for older models).
    - Ensure the display responds at address `0x3C`.
    - Show a welcome message on the OLED.
 4. After hardware checks succeed, choose what each display line should show:

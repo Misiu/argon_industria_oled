@@ -31,7 +31,7 @@ from .const import (
 )
 
 _COMMAND_CONTROL_BYTE = 0x00
-_DATA_CONTROL_BYTE = 0x40
+_DATA_CONTROL_BYTE = 0x6A  # Matches OLED_SLAVEADDRESS from original script
 _COLUMN_OFFSET = 2
 _PAGE_HEIGHT = 8
 _INIT_SEQUENCE: tuple[int, ...] = (
@@ -86,7 +86,7 @@ class _DisplayState:
 class ArgonIndustriaOledDisplay:
     """Encapsulate all hardware access for the Argon Industria OLED."""
 
-    def __init__(self, bus: int = DEFAULT_I2C_BUS, address: int = DEFAULT_I2C_ADDRESS) -> None:
+    def __init__(self, bus: int | None = None, address: int = DEFAULT_I2C_ADDRESS) -> None:
         self._bus_id = bus
         self._address = address
         self._state: _DisplayState | None = None
@@ -96,6 +96,10 @@ class ArgonIndustriaOledDisplay:
 
         if self._state is not None:
             return
+
+        # Auto-detect bus if not specified (try bus 1 first, then bus 0 for older versions)
+        if self._bus_id is None:
+            self._bus_id = self._detect_i2c_bus()
 
         self._ensure_i2c_enabled()
 
@@ -126,12 +130,31 @@ class ArgonIndustriaOledDisplay:
             self.close()
             raise
 
+    def _detect_i2c_bus(self) -> int:
+        """Detect available I2C bus, trying bus 1 first then bus 0."""
+        # Try bus 1 (default for Raspberry Pi 5 and newer models)
+        if Path(f"/dev/i2c-{DEFAULT_I2C_BUS}").exists():
+            return DEFAULT_I2C_BUS
+        # Try bus 0 (older Raspberry Pi models)
+        if Path("/dev/i2c-0").exists():
+            return 0
+        # No I2C bus found
+        raise I2CDisabledError(
+            "I2C is not enabled on this system. "
+            "For Home Assistant OS, install the HassOS I2C Configurator add-on: "
+            "https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167"
+        )
+
     def _ensure_i2c_enabled(self) -> None:
         """Verify that the Linux I²C device file exists."""
 
         i2c_path = Path(f"/dev/i2c-{self._bus_id}")
         if not i2c_path.exists():
-            raise I2CDisabledError(f"I2C bus {self._bus_id} is not enabled (missing {i2c_path}).")
+            raise I2CDisabledError(
+                f"I2C bus {self._bus_id} is not enabled (missing {i2c_path}). "
+                "For Home Assistant OS, install the HassOS I2C Configurator add-on: "
+                "https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167"
+            )
 
     def display_welcome(self) -> None:
         """Show a welcome message on the OLED display."""
@@ -153,6 +176,7 @@ class ArgonIndustriaOledDisplay:
         line_height = bottom - top
         # Defensive: line_height should always be > 0 for a valid font and character.
         assert line_height > 0, f"Unexpected non-positive line_height: {line_height}"
+        y = DISPLAY_PADDING
         for line in list(lines)[: DISPLAY_HEIGHT // line_height]:
             drawer.text((DISPLAY_PADDING, y), line[:MAX_LINE_LENGTH], font=state.font, fill=1)
             y += line_height + DISPLAY_PADDING
