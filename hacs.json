@@ -1,7 +1,6 @@
 {
-  "name": "Argon Industria V5 OLED",
-  "content_in_root": false,
-  "domain": "argon_industria_oled",
-  "country": ["PL"],
-  "homeassistant": "2022.7.0"
+  "name": "Argon Industria OLED",
+  "homeassistant": "2025.10.0",
+  "zip_release": true,
+  "filename": "argon_oled.zip"
 }
