@@ -1,0 +1,42 @@
+{
+  "title": "Argon Industria OLED",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure Argon Industria OLED",
+        "description": "The integration will verify the I²C bus and display before continuing.",
+        "data": {
+          "line1_source": "Line 1 content",
+          "line1_sensor": "Sensor entity for line 1",
+          "line2_source": "Line 2 content",
+          "line2_sensor": "Sensor entity for line 2"
+        }
+      }
+    },
+    "error": {
+      "i2c_disabled": "I²C is not enabled on this system.",
+      "display_not_found": "The OLED display was not detected at the expected address.",
+      "welcome_failed": "The display could not show the welcome message.",
+      "sensor_required": "Select a sensor entity when using the sensor option.",
+      "sensor_not_found": "The specified sensor entity could not be found.",
+      "single_instance_allowed": "Only a single Argon Industria OLED display is supported."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Argon Industria OLED",
+        "data": {
+          "line1_source": "Line 1 content",
+          "line1_sensor": "Sensor entity for line 1",
+          "line2_source": "Line 2 content",
+          "line2_sensor": "Sensor entity for line 2"
+        }
+      }
+    },
+    "error": {
+      "sensor_required": "Select a sensor entity when using the sensor option.",
+      "sensor_not_found": "The specified sensor entity could not be found."
+    }
+  }
+}
