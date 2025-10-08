@@ -176,6 +176,7 @@ class ArgonIndustriaOledDisplay:
         line_height = bottom - top
         # Defensive: line_height should always be > 0 for a valid font and character.
         assert line_height > 0, f"Unexpected non-positive line_height: {line_height}"
+        y = DISPLAY_PADDING
         for line in list(lines)[: DISPLAY_HEIGHT // line_height]:
             drawer.text((DISPLAY_PADDING, y), line[:MAX_LINE_LENGTH], font=state.font, fill=1)
             y += line_height + DISPLAY_PADDING
