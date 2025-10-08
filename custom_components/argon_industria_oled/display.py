@@ -31,7 +31,7 @@ from .const import (
 )
 
 _COMMAND_CONTROL_BYTE = 0x00
-_DATA_CONTROL_BYTE = 0x40
+_DATA_CONTROL_BYTE = 0x6A  # Matches OLED_SLAVEADDRESS from original script
 _COLUMN_OFFSET = 2
 _PAGE_HEIGHT = 8
 _INIT_SEQUENCE: tuple[int, ...] = (
