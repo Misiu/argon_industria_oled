@@ -1,6 +1,5 @@
 {
     "name": "Argon Industria OLED",
     "homeassistant": "2025.1",
-    "zip_release": true,
-    "filename": "argon_oled.zip"
+    "render_readme": true
 }
