@@ -2,6 +2,11 @@
   "name": "Argon Industria OLED",
   "homeassistant": "2025.10.0",
   "content_in_root": false,
-  "country": "US",
+  "domains": [
+    "argon_industria_oled"
+  ],
+  "country": [
+    "US"
+  ],
   "render_readme": true
 }
