@@ -1,17 +1,11 @@
 {
-  "domain": "argon_industria_oled",
+  "domain": "argon_oled",
   "name": "Argon Industria V5 OLED",
-  "after_dependencies": ["network", "system_monitor"],
   "codeowners": ["@Misiu"],
   "config_flow": true,
-  "dependencies": [],
   "documentation": "https://github.com/Misiu/Argon-Industria-V5-OLED",
-  "integration_type": "hardware",
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/Misiu/Argon-Industria-V5-OLED/issues",
-  "loggers": [
-    "custom_components.argon_industria_oled"
-  ],
   "requirements": [
     "smbus-cffi==0.5.1",
     "pillow==10.3.0"
