@@ -1,175 +1,119 @@
-"""Coordinator for updating the Argon Industria OLED display."""
+"""Data coordinator for Argon Industria OLED device state."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Mapping
-from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.network import async_get_ipv4_addresses
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
-    CONF_LINE1_SENSOR,
-    CONF_LINE1_SOURCE,
-    CONF_LINE2_SENSOR,
-    CONF_LINE2_SOURCE,
     COORDINATOR_UPDATE_INTERVAL,
-    DEFAULT_LINE1_SOURCE,
-    DEFAULT_LINE2_SOURCE,
-    LINE_SOURCE_CPU_TEMPERATURE,
-    LINE_SOURCE_IP_ADDRESS,
-    LINE_SOURCE_SENSOR,
-    MAX_LINE_LENGTH,
+    STATE_CONNECTED,
+    STATE_LAST_DRAW_TIME,
+    STATE_LAST_ERROR,
 )
-from .display import (
-    ArgonIndustriaOledDisplay,
-    DisplayCommunicationError,
-    DisplayError,
-)
+from .device import ArgonOledDevice, DeviceError
 
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
-class DisplayLineConfig:
-    """Configuration for a single display line."""
-
-    source: str
-    sensor: str | None
-
-
-class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, str]]):
-    """Coordinate data updates for the Argon Industria OLED display."""
+class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Track OLED connectivity and last operation status."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
             hass,
-            _LOGGER,
+            logger=_LOGGER,
             name="Argon Industria OLED",
             update_interval=COORDINATOR_UPDATE_INTERVAL,
         )
-        self._entry = entry
-        self._display = ArgonIndustriaOledDisplay()
+        self.entry = entry
+        self.device = ArgonOledDevice()
         self._executor_lock = asyncio.Lock()
 
-    @property
-    def entry(self) -> ConfigEntry:
-        """Return the active config entry."""
-        return self._entry
-
-    def update_config_entry(self, entry: ConfigEntry) -> None:
-        """Update the config entry reference for new options."""
-        self._entry = entry
-
-    async def _async_update_data(self) -> dict[str, str]:
-        """Fetch and write the latest information to the display."""
-        line_config = self._resolve_line_config()
-
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Refresh connectivity state without crashing the integration."""
         try:
-            lines = await self._async_render_lines(line_config)
-            await self._async_write_lines(lines)
-        except DisplayCommunicationError as err:
-            raise UpdateFailed(f"Failed to communicate with OLED: {err}") from err
-        except DisplayError as err:
-            raise UpdateFailed(f"Display error: {err}") from err
-
-        return lines
-
-    async def _async_render_lines(self, config: Mapping[str, DisplayLineConfig]) -> dict[str, str]:
-        """Render each configured line to display text."""
-        rendered: dict[str, str] = {}
-
-        line1 = await self._async_render_line(config[CONF_LINE1_SOURCE])
-        rendered["line1"] = line1
-
-        line2 = await self._async_render_line(config[CONF_LINE2_SOURCE])
-        rendered["line2"] = line2
-
-        return rendered
-
-    def _resolve_line_config(self) -> dict[str, DisplayLineConfig]:
-        """Combine entry data and options into line configuration."""
-        data: dict[str, Any] = {**self._entry.data, **self._entry.options}
+            connected = await self.hass.async_add_executor_job(self.device.probe)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Probe failed: %s", err)
+            connected = False
+            return {
+                STATE_CONNECTED: connected,
+                STATE_LAST_ERROR: str(err),
+                STATE_LAST_DRAW_TIME: self.data.get(STATE_LAST_DRAW_TIME) if self.data else None,
+            }
 
         return {
-            CONF_LINE1_SOURCE: DisplayLineConfig(
-                source=data.get(CONF_LINE1_SOURCE, DEFAULT_LINE1_SOURCE),
-                sensor=data.get(CONF_LINE1_SENSOR),
-            ),
-            CONF_LINE2_SOURCE: DisplayLineConfig(
-                source=data.get(CONF_LINE2_SOURCE, DEFAULT_LINE2_SOURCE),
-                sensor=data.get(CONF_LINE2_SENSOR),
-            ),
+            STATE_CONNECTED: connected,
+            STATE_LAST_ERROR: None if connected else "display_not_found",
+            STATE_LAST_DRAW_TIME: self.data.get(STATE_LAST_DRAW_TIME) if self.data else None,
         }
 
-    async def _async_render_line(self, config: DisplayLineConfig) -> str:
-        """Render a single display line based on its configuration."""
-        if config.source == LINE_SOURCE_IP_ADDRESS:
-            return await self._async_get_primary_ipv4()
-        if config.source == LINE_SOURCE_CPU_TEMPERATURE:
-            return await self._async_get_cpu_temperature()
-        if config.source == LINE_SOURCE_SENSOR:
-            return self._render_sensor_value(config.sensor)
-        raise HomeAssistantError(f"Unsupported line source: {config.source}")
-
-    async def _async_get_primary_ipv4(self) -> str:
-        """Return the first active IPv4 address for the host."""
-        addresses = [addr for addr in async_get_ipv4_addresses() if not addr.startswith("127.")]
-        if not addresses:
-            return "IP unavailable"
-        return sorted(addresses)[0]
-
-    async def _async_get_cpu_temperature(self) -> str:
-        """Read the CPU temperature from the main thermal zone."""
-        def read_temperature() -> str:
-            path = "/sys/class/thermal/thermal_zone0/temp"
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    raw = handle.read().strip()
-            except FileNotFoundError:
-                raise HomeAssistantError("CPU temperature path not found") from None
-            except OSError as err:
-                raise HomeAssistantError(f"Unable to read CPU temperature: {err}") from err
-
-            try:
-                millidegrees = int(raw)
-            except ValueError as err:
-                raise HomeAssistantError("Invalid CPU temperature value") from err
-
-            return f"CPU {millidegrees / 1000:.1f}°C"
-
-        return await self.hass.async_add_executor_job(read_temperature)
-
-    def _render_sensor_value(self, entity_id: str | None) -> str:
-        """Return the state string for the selected sensor entity."""
-        if not entity_id:
-            return "Sensor not set"
-        state = self.hass.states.get(entity_id)
-        if state is None:
-            return "Sensor unavailable"
-        if state.state in ("unknown", "unavailable"):
-            return state.state.title()
-        unit = state.attributes.get("unit_of_measurement")
-        value = state.state
-        if unit:
-            return f"{value} {unit}"[:MAX_LINE_LENGTH]
-        return value[:MAX_LINE_LENGTH]
-
-    async def _async_write_lines(self, lines: Mapping[str, str]) -> None:
-        """Write prepared lines to the display, serialized in the executor."""
+    async def async_initialize(self) -> None:
+        """Initialize the device."""
         async with self._executor_lock:
-            await self.hass.async_add_executor_job(self._display.ensure_initialized)
-            await self.hass.async_add_executor_job(
-                self._display.show_lines,
-                [lines.get("line1", ""), lines.get("line2", "")],
-            )
+            await self.hass.async_add_executor_job(self.device.initialize)
+        await self.async_set_status(connected=True, error=None)
+
+    async def async_show_startup(self) -> None:
+        """Show splash screen and keep it visible."""
+        async with self._executor_lock:
+            await self.hass.async_add_executor_job(self.device.initialize)
+            await self.hass.async_add_executor_job(self.device.show_startup)
+        await self.async_set_status(connected=True, error=None, drew=True)
+
+    async def async_draw(self, elements: list[dict[str, Any]], clear: bool) -> None:
+        """Draw custom elements and update status."""
+        try:
+            async with self._executor_lock:
+                await self.hass.async_add_executor_job(self.device.initialize)
+                await self.hass.async_add_executor_job(self.device.draw, elements, clear)
+        except DeviceError as err:
+            _LOGGER.error("Draw failed: %s", err)
+            await self.async_set_status(connected=False, error=str(err))
+            raise
+
+        await self.async_set_status(connected=True, error=None, drew=True)
+
+    async def async_clear(self) -> None:
+        """Clear display and update status."""
+        try:
+            async with self._executor_lock:
+                await self.hass.async_add_executor_job(self.device.initialize)
+                await self.hass.async_add_executor_job(self.device.clear)
+        except DeviceError as err:
+            _LOGGER.error("Clear failed: %s", err)
+            await self.async_set_status(connected=False, error=str(err))
+            raise
+
+        await self.async_set_status(connected=True, error=None, drew=True)
+
+    async def async_set_status(self, connected: bool, error: str | None, drew: bool = False) -> None:
+        """Persist service-operation health to coordinator data."""
+        current = self.data or {
+            STATE_CONNECTED: False,
+            STATE_LAST_ERROR: None,
+            STATE_LAST_DRAW_TIME: None,
+        }
+        updated = dict(current)
+        updated[STATE_CONNECTED] = connected
+        updated[STATE_LAST_ERROR] = error
+        if drew:
+            updated[STATE_LAST_DRAW_TIME] = self._current_iso_time()
+
+        self.async_set_updated_data(updated)
 
     async def async_shutdown(self) -> None:
-        """Release display resources."""
-        await self.hass.async_add_executor_job(self._display.close)
+        """Close hardware resources."""
+        await self.hass.async_add_executor_job(self.device.close)
+
+    @staticmethod
+    def _current_iso_time() -> str:
+        """Return UTC timestamp string for diagnostics."""
+        return datetime.now(UTC).isoformat()

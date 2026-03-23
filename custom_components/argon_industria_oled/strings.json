@@ -3,40 +3,20 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configure Argon Industria OLED",
-        "description": "The integration will verify the I²C bus and display before continuing.",
-        "data": {
-          "line1_source": "Line 1 content",
-          "line1_sensor": "Sensor entity for line 1",
-          "line2_source": "Line 2 content",
-          "line2_sensor": "Sensor entity for line 2"
-        }
+        "title": "Detect Argon Industria OLED",
+        "description": "The integration automatically detects an SSD1306 display on I²C bus 1 at address 0x3C."
       }
     },
-    "error": {
-      "i2c_disabled": "I²C is not enabled on this system. For Home Assistant OS, install the HassOS I2C Configurator add-on: https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167",
-      "display_not_found": "The OLED display was not detected at the expected address.",
-      "welcome_failed": "The display could not show the welcome message.",
-      "sensor_required": "Select a sensor entity when using the sensor option.",
-      "sensor_not_found": "The specified sensor entity could not be found.",
-      "single_instance_allowed": "Only a single Argon Industria OLED display is supported."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Update Argon Industria OLED",
-        "data": {
-          "line1_source": "Line 1 content",
-          "line1_sensor": "Sensor entity for line 1",
-          "line2_source": "Line 2 content",
-          "line2_sensor": "Sensor entity for line 2"
-        }
-      }
+    "abort": {
+      "display_not_found": "The OLED display was not detected at I²C bus 1 address 0x3C.",
+      "cannot_initialize_display": "The OLED was detected but could not be initialized.",
+      "unknown": "An unknown error occurred during display detection.",
+      "single_instance_allowed": "Only one Argon Industria OLED configuration is supported."
     },
     "error": {
-      "sensor_required": "Select a sensor entity when using the sensor option.",
-      "sensor_not_found": "The specified sensor entity could not be found."
+      "display_not_found": "The OLED display was not detected at I²C bus 1 address 0x3C.",
+      "cannot_initialize_display": "The OLED was detected but could not be initialized.",
+      "unknown": "An unknown error occurred during display detection."
     }
   }
 }

@@ -1,0 +1,36 @@
+drawcustom:
+  name: Draw custom elements
+  description: Draw arbitrary graphics elements onto the OLED framebuffer and flush once.
+  fields:
+    clear:
+      name: Clear display first
+      description: Clear the display before drawing elements.
+      required: false
+      default: true
+      selector:
+        boolean:
+    elements:
+      name: Elements
+      description: List of drawing elements (text, multiline_text, line, rectangle, filled_rectangle, image, pixel).
+      required: true
+      example:
+        - type: text
+          x: 0
+          y: 0
+          value: Home Assistant
+          font_size: 12
+        - type: line
+          x1: 0
+          y1: 14
+          x2: 127
+          y2: 14
+      selector:
+        object:
+
+clear:
+  name: Clear display
+  description: Clear the OLED screen.
+
+show_logo:
+  name: Show startup splash
+  description: Show the default Home Assistant splash screen.
