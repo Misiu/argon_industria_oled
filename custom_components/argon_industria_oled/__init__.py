@@ -14,7 +14,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     ATTR_CLEAR,
-    ATTR_ELEMENTS,
+    ATTR_PAYLOAD,
     DOMAIN,
     PLATFORMS,
     SERVICE_CLEAR,
@@ -31,8 +31,9 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 DRAW_CUSTOM_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CLEAR, default=True): bool,
-        vol.Required(ATTR_ELEMENTS): list,
-    }
+        vol.Required(ATTR_PAYLOAD): list,
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
 
@@ -56,7 +57,10 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             return
 
         clear = bool(call.data.get(ATTR_CLEAR, True))
-        elements = call.data.get(ATTR_ELEMENTS, [])
+        elements = call.data.get(ATTR_PAYLOAD) or []
+        if not elements:
+            _LOGGER.error("drawcustom requires non-empty 'payload'")
+            return
         try:
             await coordinator.async_draw(elements=elements, clear=clear)
         except DeviceError as err:

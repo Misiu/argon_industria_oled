@@ -10,10 +10,9 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 try:  # pragma: no cover - runtime import guard
-    from luma.core.interface.serial import i2c
-    from luma.oled.device import ssd1306
+    from smbus2 import SMBus
 except ImportError as err:  # pragma: no cover - runtime import guard
-    raise RuntimeError("luma.oled must be installed to use this integration") from err
+    raise RuntimeError("smbus2 must be installed to use this integration") from err
 
 try:  # pragma: no cover - runtime import guard
     from PIL import Image, ImageDraw, ImageFont
@@ -26,9 +25,9 @@ from .const import (
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
     ELEMENT_FILLED_RECTANGLE,
-    ELEMENT_IMAGE,
+    ELEMENT_DLIMG,
     ELEMENT_LINE,
-    ELEMENT_MULTILINE_TEXT,
+    ELEMENT_MULTILINE,
     ELEMENT_PIXEL,
     ELEMENT_RECTANGLE,
     ELEMENT_TEXT,
@@ -41,6 +40,38 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+_COMMAND_CONTROL_BYTE = 0x00
+_DATA_CONTROL_BYTE = 0x6A
+_COLUMN_OFFSET = 2
+_PAGE_HEIGHT = 8
+_PAGE_COUNT = DISPLAY_HEIGHT // _PAGE_HEIGHT
+_WRITE_CHUNK = 16
+_INIT_SEQUENCE: tuple[int, ...] = (
+    0xAE,
+    0xD5,
+    0x80,
+    0xA8,
+    0x3F,
+    0xD3,
+    0x00,
+    0x40,
+    0xA1,
+    0xC8,
+    0xDA,
+    0x12,
+    0x81,
+    0x7F,
+    0xD9,
+    0x22,
+    0xDB,
+    0x35,
+    0xA4,
+    0xA6,
+    0x8D,
+    0x14,
+    0xAF,
+)
 
 
 class DeviceError(Exception):
@@ -59,7 +90,7 @@ class DeviceInitializeError(DeviceError):
 class _DeviceState:
     """Runtime handles for the OLED device."""
 
-    oled: Any
+    bus: SMBus
     framebuffer: Image.Image
 
 
@@ -106,8 +137,9 @@ class ArgonOledDevice:
     def clear(self) -> None:
         """Clear the display."""
         state = self._require_state()
-        state.oled.clear()
-        state.framebuffer = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
+        blank = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
+        self._write_image(state.bus, blank)
+        state.framebuffer = blank
 
     def show_startup(self) -> None:
         """Render startup splash image from constant bitmap bytes."""
@@ -115,7 +147,7 @@ class ArgonOledDevice:
         def operation() -> None:
             state = self._require_state()
             splash_image = self._image_from_splash_bytes()
-            state.oled.display(splash_image)
+            self._write_image(state.bus, splash_image)
             state.framebuffer = splash_image
 
         self._retry(operation, context="show_startup")
@@ -141,15 +173,13 @@ class ArgonOledDevice:
 
         image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
         pixels = image.load()
-        page_height = 8
-        page_count = DISPLAY_HEIGHT // page_height
 
-        for page in range(page_count):
+        for page in range(_PAGE_COUNT):
             page_offset = page * DISPLAY_WIDTH
             for x in range(DISPLAY_WIDTH):
                 byte_value = raw_splash[page_offset + x]
-                for bit in range(page_height):
-                    y = page * page_height + bit
+                for bit in range(_PAGE_HEIGHT):
+                    y = page * _PAGE_HEIGHT + bit
                     if (byte_value >> bit) & 0x01:
                         pixels[x, y] = 1
 
@@ -160,17 +190,13 @@ class ArgonOledDevice:
 
         def operation() -> None:
             state = self._require_state()
-            image = (
-                Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
-                if clear
-                else state.framebuffer.copy()
-            )
+            image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0) if clear else state.framebuffer.copy()
             drawer = ImageDraw.Draw(image)
 
             for element in elements:
                 self._draw_element(drawer, image, element)
 
-            state.oled.display(image)
+            self._write_image(state.bus, image)
             state.framebuffer = image
 
         self._retry(operation, context="draw")
@@ -182,45 +208,46 @@ class ArgonOledDevice:
             raise DeviceError(f"Unsupported element type: {element_type}")
 
         if element_type == ELEMENT_TEXT:
-            font = self._load_font(element.get("font_size"))
+            font = self._load_font(element.get("size"))
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
             value = str(element.get("value", ""))
             drawer.text((x, y), value, font=font, fill=1)
             return
 
-        if element_type == ELEMENT_MULTILINE_TEXT:
-            font = self._load_font(element.get("font_size"))
+        if element_type == ELEMENT_MULTILINE:
+            font = self._load_font(element.get("size"))
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
-            value = str(element.get("value", ""))
             spacing = max(0, int(element.get("spacing", 2)))
-            drawer.multiline_text((x, y), value, font=font, fill=1, spacing=spacing)
+            delimiter = str(element.get("delimiter", "|"))
+            offset_y = int(element.get("offset_y", 0))
+            lines = str(element.get("value", "")).split(delimiter)
+            value = "\n".join(lines)
+            drawer.multiline_text((x, y + offset_y), value, font=font, fill=1, spacing=spacing)
             return
 
         if element_type == ELEMENT_LINE:
-            drawer.line(
-                (
-                    self._clamp_x(element.get("x1", 0)),
-                    self._clamp_y(element.get("y1", 0)),
-                    self._clamp_x(element.get("x2", 0)),
-                    self._clamp_y(element.get("y2", 0)),
-                ),
-                fill=1,
-            )
+            x1 = self._clamp_x(element.get("x_start", 0))
+            y1 = self._clamp_y(element.get("y_start", 0))
+            x2 = self._clamp_x(element.get("x_end", 0))
+            y2 = self._clamp_y(element.get("y_end", y1))
+            width = max(1, int(element.get("width", 1)))
+            drawer.line((x1, y1, x2, y2), fill=1, width=width)
             return
 
         if element_type in (ELEMENT_RECTANGLE, ELEMENT_FILLED_RECTANGLE):
-            x = self._clamp_x(element.get("x", 0))
-            y = self._clamp_y(element.get("y", 0))
-            width = max(1, int(element.get("width", 1)))
-            height = max(1, int(element.get("height", 1)))
-            x2 = self._clamp_x(x + width - 1)
-            y2 = self._clamp_y(y + height - 1)
+            x1 = self._clamp_x(element.get("x_start", 0))
+            y1 = self._clamp_y(element.get("y_start", 0))
+            x2 = self._clamp_x(element.get("x_end", x1))
+            y2 = self._clamp_y(element.get("y_end", y1))
+
             if element_type == ELEMENT_RECTANGLE:
-                drawer.rectangle((x, y, x2, y2), outline=1, fill=1 if bool(element.get("fill")) else 0)
+                fill = 1 if bool(element.get("fill", False)) else 0
+                drawer.rectangle((x1, y1, x2, y2), outline=1, fill=fill)
             else:
-                drawer.rectangle((x, y, x2, y2), outline=1 if bool(element.get("outline", True)) else 0, fill=1)
+                outline = 1 if bool(element.get("outline", True)) else 0
+                drawer.rectangle((x1, y1, x2, y2), outline=outline, fill=1)
             return
 
         if element_type == ELEMENT_PIXEL:
@@ -229,15 +256,15 @@ class ArgonOledDevice:
             drawer.point((x, y), fill=1)
             return
 
-        if element_type == ELEMENT_IMAGE:
+        if element_type == ELEMENT_DLIMG:
             self._draw_image(canvas, element)
             return
 
     def _draw_image(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Render a source image onto the framebuffer with clipping."""
-        source = element.get("path")
+        source = element.get("url")
         if not source:
-            raise DeviceError("Image element requires a 'path' field")
+            raise DeviceError("dlimg element requires 'url'")
 
         image_path = Path(str(source))
         if not image_path.exists():
@@ -245,8 +272,8 @@ class ArgonOledDevice:
 
         with Image.open(image_path) as opened:
             image = opened.convert("1")
-            width = int(element.get("width", image.width))
-            height = int(element.get("height", image.height))
+            width = int(element.get("xsize", element.get("width", image.width)))
+            height = int(element.get("ysize", element.get("height", image.height)))
             if width > 0 and height > 0 and (width != image.width or height != image.height):
                 image = image.resize((width, height))
 
@@ -256,7 +283,7 @@ class ArgonOledDevice:
 
     def _load_font(self, font_size: Any) -> ImageFont.ImageFont:
         """Load a readable default font with optional size hint."""
-        size = max(6, int(font_size)) if font_size is not None else 12
+        size = max(6, int(font_size)) if font_size is not None else 20
         try:
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except OSError:
@@ -270,12 +297,14 @@ class ArgonOledDevice:
         self._ensure_i2c_bus_path()
 
         try:
-            serial = i2c(port=self._bus, address=self._address)
-            oled = ssd1306(serial_interface=serial, width=DISPLAY_WIDTH, height=DISPLAY_HEIGHT)
+            bus_handle = SMBus(self._bus)
+            self._write_commands(bus_handle, _INIT_SEQUENCE)
             self._state = _DeviceState(
-                oled=oled,
+                bus=bus_handle,
                 framebuffer=Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0),
             )
+        except FileNotFoundError as err:
+            raise DeviceNotFoundError(f"I2C bus {self._bus} is not available: {err}") from err
         except OSError as err:
             raise DeviceNotFoundError(
                 f"I2C device not found on bus {self._bus} at address 0x{self._address:02x}: {err}"
@@ -295,8 +324,58 @@ class ArgonOledDevice:
         if not bus_path.exists():
             raise DeviceNotFoundError(f"I2C bus path is missing: {bus_path}")
 
+    def _write_image(self, bus: SMBus, image: Image.Image) -> None:
+        """Write image framebuffer to display pages."""
+        pixels = image.load()
+        for page in range(_PAGE_COUNT):
+            self._write_commands(
+                bus,
+                (
+                    0xB0 + page,
+                    (_COLUMN_OFFSET & 0x0F),
+                    0x10 | ((_COLUMN_OFFSET >> 4) & 0x0F),
+                ),
+            )
+
+            page_data: list[int] = []
+            for column in range(DISPLAY_WIDTH):
+                byte = 0
+                for bit in range(_PAGE_HEIGHT):
+                    y = page * _PAGE_HEIGHT + bit
+                    if pixels[column, y]:
+                        byte |= 1 << bit
+                page_data.append(byte)
+
+            self._write_data(bus, page_data)
+
+    def _write_commands(self, bus: SMBus, commands: tuple[int, ...] | list[int]) -> None:
+        """Send command bytes to OLED."""
+        for command in commands:
+            try:
+                bus.write_byte_data(self._address, _COMMAND_CONTROL_BYTE, command & 0xFF)
+            except OSError as err:
+                raise DeviceError(f"Failed to write OLED command 0x{command:02X}: {err}") from err
+
+    def _write_data(self, bus: SMBus, data: list[int]) -> None:
+        """Send image data in bounded chunks."""
+        for index in range(0, len(data), _WRITE_CHUNK):
+            chunk = list(data[index : index + _WRITE_CHUNK])
+            try:
+                bus.write_i2c_block_data(self._address, _DATA_CONTROL_BYTE, chunk)
+            except OSError as err:
+                raise DeviceError(f"Failed to write OLED data: {err}") from err
+
     def close(self) -> None:
         """Close runtime resources."""
+        state = self._state
+        if state is None:
+            return
+
+        if hasattr(state.bus, "close"):
+            try:
+                state.bus.close()
+            except OSError:
+                pass
         self._state = None
 
     def _retry(self, func: Callable[[], T], context: str) -> T:
@@ -335,4 +414,3 @@ class ArgonOledDevice:
     def _clamp_y(value: Any) -> int:
         """Clamp a y coordinate to display bounds."""
         return max(0, min(DISPLAY_HEIGHT - 1, int(value)))
-

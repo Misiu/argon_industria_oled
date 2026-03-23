@@ -1,64 +1,232 @@
-# WIP Argon Industria OLED Home Assistant Integration
+# Argon Industria OLED Home Assistant Integration
 
-This repository contains a custom [Home Assistant](https://www.home-assistant.io/) integration that drives the Argon Industria OLED module connected to a Raspberry Pi 5 via I²C. The integration detects the display, renders useful status information, and keeps the content up to date directly from Home Assistant.
+Custom Home Assistant integration for the Argon ONE V5 Industria OLED module (SSD1306, 128x64, I2C address `0x3C`).
+
+## Current Direction
+- Domain: `argon_industria_oled`
+- Local hardware control on Raspberry Pi via I2C
+- Dependencies used by the integration runtime:
+  - `smbus2`
+  - `Pillow`
+- Draw service syntax aligned with OpenDisplay style to reduce friction for users already familiar with OpenDisplay.
 
 ## Features
-- **HACS ready**: Installable through [HACS](https://hacs.xyz/).
-- **Guided configuration**: Config flow verifies that I²C is enabled and the display is reachable before you pick the content you want to show.
-- **Flexible content**: Choose between network IP address, CPU temperature, or any Home Assistant sensor entity for each display line.
-- **Automatic refresh**: The display updates periodically to keep information current.
+- Automatic display detection during config flow
+- Startup splash logo on OLED (kept visible)
+- `drawcustom` service with OpenDisplay-like payload syntax
+- `clear` and `show_logo` services
+- Health state via coordinator + connected binary sensor
 
-## Hardware
-- Argon Industria OLED module (55mm × 90mm) — see the [datasheet](https://files.waveshare.com/wiki/ARGON-ONE-V5-OLED-Module/FOR_PRINT_ARGON_INDUSTRIA_OLED_55mmx90mm_20241219.pdf).
-- Raspberry Pi 5 with the module attached to the 40-pin header and I²C enabled.
+## Installation (HACS)
+Before installing this integration, make sure I2C is enabled on Home Assistant OS.
 
-### Enabling I²C
-The integration requires I²C to be enabled on your Raspberry Pi. For Home Assistant OS users, the easiest way to enable I²C is to install the **HassOS I2C Configurator** add-on:
-- Add-on repository: https://github.com/adamoutler/HassOSConfigurator
-- Community discussion: https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167
+### Enable I2C on Home Assistant OS (Required)
+This follows the same practical flow used in `Misiu/argon40` and community guidance from the HassOS I2C Configurator thread.
 
-The integration will automatically detect the I²C bus (trying bus 1 first, then bus 0 for older Raspberry Pi models).
+Important:
+- Restarting Home Assistant from UI is not enough.
+- You need full host reboots (power-cycle style), twice.
 
-## Installation via HACS
-1. In Home Assistant, open **HACS → Integrations**.
-2. Click the three-dot menu and choose **Custom repositories**.
-3. Enter `https://github.com/Misiu/Argon-Industria-V5-OLED` as the repository URL and select **Integration** as the category.
-4. Add the repository, then search for “Argon Industria OLED” and install it.
-5. Restart Home Assistant when prompted.
+Steps:
+1. Install and run the HassOS I2C Configurator add-on:
+  - Community reference: `https://community.home-assistant.io/t/add-on-hassos-i2c-configurator/264167`
+2. Wait until add-on logs report completion.
+3. Perform first full reboot of the host (not only HA Core restart).
+4. After it boots, perform second full reboot of the host.
+5. Only after these two reboots continue with integration installation.
 
-## Configuration
-1. Navigate to **Settings → Devices & Services** and click **Add Integration**.
-2. Search for **Argon Industria OLED**.
-3. The config flow will:
-   - Auto-detect the I²C bus (tries `/dev/i2c-1` first, then `/dev/i2c-0` for older models).
-   - Ensure the display responds at address `0x3C`.
-   - Show a welcome message on the OLED.
-4. After hardware checks succeed, choose what each display line should show:
-   - **IP address**: The first active IPv4 address on the host.
-   - **CPU temperature**: Read from the main SoC thermal zone.
-   - **Sensor value**: Provide the entity ID of any Home Assistant sensor.
+If I2C still does not appear:
+- Run the add-on again and repeat the two full host reboots.
+- Verify hardware power stability (undervoltage can break I2C bring-up).
 
-You can update these selections later from the integration’s options.
+1. Open Home Assistant: Settings -> Devices & Services -> HACS -> Integrations.
+2. Add custom repository:
+   - URL: `https://github.com/Misiu/Argon-Industria-V5-OLED`
+   - Category: Integration
+3. Install integration and restart Home Assistant.
+4. Add integration: Settings -> Devices & Services -> Add Integration -> Argon OLED.
 
-## Development
-### Requirements
-- Python 3.12+
-- [Home Assistant Core dev environment](https://developers.home-assistant.io/docs/development_environment)
-- OLED dependencies: `smbus-cffi`, `Pillow`
+## drawcustom Syntax (OpenDisplay-like)
+Service: `argon_industria_oled.drawcustom`
 
-### Local setup
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements_dev.txt  # optional helper tools
+Top-level fields:
+- `clear` (optional, bool, default: `true`)
+- `payload` (required, list of draw elements)
+
+### Example
+```yaml
+service: argon_industria_oled.drawcustom
+data:
+  clear: true
+  payload:
+    - type: text
+      value: "Hello"
+      x: 0
+      y: 0
+      size: 14
+
+    - type: line
+      x_start: 0
+      y_start: 16
+      x_end: 127
+      y_end: 16
+      width: 1
+
+    - type: rectangle
+      x_start: 2
+      y_start: 20
+      x_end: 125
+      y_end: 45
+      fill: false
+
+    - type: pixel
+      x: 64
+      y: 32
 ```
 
-### Validation
-Run the same checks used in CI:
+## Supported Draw Types
+
+### 1) text
+Required:
+- `type: text`
+- `value`
+- `x`
+- `y`
+
+Optional:
+- `size` (default used when omitted)
+
+```yaml
+- type: text
+  value: "CPU 42C"
+  x: 4
+  y: 4
+  size: 12
+```
+
+### 2) multiline
+Required:
+- `type: multiline`
+- `value`
+- `x`
+- `y`
+
+Optional:
+- `delimiter` (default: `|`)
+- `offset_y` (default: `0`)
+- `size`
+- `spacing`
+
+```yaml
+- type: multiline
+  value: "Line 1|Line 2|Line 3"
+  delimiter: "|"
+  x: 0
+  y: 0
+  offset_y: 0
+  size: 12
+  spacing: 2
+```
+
+### 3) line
+Required:
+- `type: line`
+- `x_start`
+- `y_start`
+- `x_end`
+
+Optional:
+- `y_end` (defaults to `y_start`)
+- `width` (default: `1`)
+
+```yaml
+- type: line
+  x_start: 0
+  y_start: 10
+  x_end: 127
+  y_end: 10
+  width: 1
+```
+
+### 4) rectangle
+Required:
+- `type: rectangle`
+- `x_start`, `y_start`, `x_end`, `y_end`
+
+Optional:
+- `fill` (`true/false`, default: `false`)
+
+```yaml
+- type: rectangle
+  x_start: 10
+  y_start: 10
+  x_end: 100
+  y_end: 40
+  fill: false
+```
+
+### 5) filled_rectangle
+Required:
+- `type: filled_rectangle`
+- `x_start`, `y_start`, `x_end`, `y_end`
+
+Optional:
+- `outline` (`true/false`, default: `true`)
+
+```yaml
+- type: filled_rectangle
+  x_start: 20
+  y_start: 20
+  x_end: 60
+  y_end: 40
+  outline: true
+```
+
+### 6) dlimg
+Required:
+- `type: dlimg`
+- `url` (currently local file path)
+- `x`, `y`
+
+Optional:
+- `xsize`, `ysize`
+
+```yaml
+- type: dlimg
+  url: "/config/www/oled/logo.png"
+  x: 0
+  y: 0
+  xsize: 64
+  ysize: 32
+```
+
+### 7) pixel
+Required:
+- `type: pixel`
+- `x`, `y`
+
+```yaml
+- type: pixel
+  x: 5
+  y: 5
+```
+
+## Other Services
+- `argon_industria_oled.clear`: clears display.
+- `argon_industria_oled.show_logo`: redraws startup splash/logo.
+
+## Hardware Notes
+- Bus: `1`
+- Address: `0x3C`
+- Resolution: `128x64`
+- Linux path expected: `/dev/i2c-1`
+
+## Development Checks
+Run before commit:
 ```bash
 hassfest
 python3 -m script.hacs
 ```
 
 ## License
-Distributed under the MIT License. See `LICENSE` for details.
+MIT (see LICENSE).

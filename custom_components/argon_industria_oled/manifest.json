@@ -9,9 +9,8 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Misiu/Argon-Industria-V5-OLED/issues",
   "requirements": [
-    "luma.oled==3.14.0",
-    "smbus2==0.4.3",
-    "pillow==10.3.0"
+    "pillow==10.3.0",
+    "smbus2==0.6.0"
   ],
   "single_config_entry": true,
   "version": "0.1.0"

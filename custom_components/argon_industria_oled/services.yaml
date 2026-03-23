@@ -9,21 +9,21 @@ drawcustom:
       default: true
       selector:
         boolean:
-    elements:
-      name: Elements
-      description: List of drawing elements (text, multiline_text, line, rectangle, filled_rectangle, image, pixel).
+    payload:
+      name: Payload
+      description: OpenDisplay-like list of draw elements (text, multiline, line, rectangle, filled_rectangle, dlimg, pixel).
       required: true
       example:
         - type: text
           x: 0
           y: 0
           value: Home Assistant
-          font_size: 12
+          size: 12
         - type: line
-          x1: 0
-          y1: 14
-          x2: 127
-          y2: 14
+          x_start: 0
+          y_start: 14
+          x_end: 127
+          y_end: 14
       selector:
         object:
 
