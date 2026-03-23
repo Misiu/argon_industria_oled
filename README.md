@@ -224,8 +224,14 @@ Required:
 ## Development Checks
 Run before commit:
 ```bash
+python -m pip install -r requirements_dev.txt
+
+ruff format --check .
+ruff check .
+mypy custom_components/argon_industria_oled
+pylint custom_components/argon_industria_oled
+
 hassfest
-python3 -m script.hacs
 ```
 
 ## License

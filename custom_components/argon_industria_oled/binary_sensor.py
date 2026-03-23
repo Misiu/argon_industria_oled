@@ -6,6 +6,7 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -30,7 +31,9 @@ async def async_setup_entry(
     async_add_entities([ArgonOledConnectedBinarySensor(coordinator, entry)])
 
 
-class ArgonOledConnectedBinarySensor(CoordinatorEntity[ArgonIndustriaOledCoordinator], BinarySensorEntity):
+class ArgonOledConnectedBinarySensor(
+    CoordinatorEntity[ArgonIndustriaOledCoordinator], BinarySensorEntity
+):
     """Report whether the OLED can be reached."""
 
     _attr_has_entity_name = True
@@ -62,8 +65,11 @@ class ArgonOledConnectedBinarySensor(CoordinatorEntity[ArgonIndustriaOledCoordin
         }
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Describe the physical OLED module for the device registry."""
+        hw_version = (
+            f"I2C {DEFAULT_I2C_BUS}@0x{DEFAULT_I2C_ADDRESS:02X} {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+        )
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": "Argon Industria OLED",
@@ -71,5 +77,5 @@ class ArgonOledConnectedBinarySensor(CoordinatorEntity[ArgonIndustriaOledCoordin
             "model": "Argon ONE V5 Industria OLED",
             "configuration_url": "https://argon40.com/products/argon-one-v5-industria-oled-module",
             "sw_version": "0.1.0",
-            "hw_version": f"I2C {DEFAULT_I2C_BUS}@0x{DEFAULT_I2C_ADDRESS:02X} {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}",
+            "hw_version": hw_version,
         }

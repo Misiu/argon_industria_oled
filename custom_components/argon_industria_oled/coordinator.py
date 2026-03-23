@@ -38,16 +38,7 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Refresh connectivity state without crashing the integration."""
-        try:
-            connected = await self.hass.async_add_executor_job(self.device.probe)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error("Probe failed: %s", err)
-            connected = False
-            return {
-                STATE_CONNECTED: connected,
-                STATE_LAST_ERROR: str(err),
-                STATE_LAST_DRAW_TIME: self.data.get(STATE_LAST_DRAW_TIME) if self.data else None,
-            }
+        connected = await self.hass.async_add_executor_job(self.device.probe)
 
         return {
             STATE_CONNECTED: connected,
@@ -94,7 +85,9 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         await self.async_set_status(connected=True, error=None, drew=True)
 
-    async def async_set_status(self, connected: bool, error: str | None, drew: bool = False) -> None:
+    async def async_set_status(
+        self, connected: bool, error: str | None, drew: bool = False
+    ) -> None:
         """Persist service-operation health to coordinator data."""
         current = self.data or {
             STATE_CONNECTED: False,

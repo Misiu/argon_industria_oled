@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -24,8 +25,8 @@ from .const import (
     DEFAULT_I2C_BUS,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
-    ELEMENT_FILLED_RECTANGLE,
     ELEMENT_DLIMG,
+    ELEMENT_FILLED_RECTANGLE,
     ELEMENT_LINE,
     ELEMENT_MULTILINE,
     ELEMENT_PIXEL,
@@ -173,6 +174,8 @@ class ArgonOledDevice:
 
         image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
         pixels = image.load()
+        if pixels is None:
+            raise DeviceInitializeError("Could not get splash image pixel buffer")
 
         for page in range(_PAGE_COUNT):
             page_offset = page * DISPLAY_WIDTH
@@ -190,7 +193,11 @@ class ArgonOledDevice:
 
         def operation() -> None:
             state = self._require_state()
-            image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0) if clear else state.framebuffer.copy()
+            image = (
+                Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
+                if clear
+                else state.framebuffer.copy()
+            )
             drawer = ImageDraw.Draw(image)
 
             for element in elements:
@@ -201,7 +208,9 @@ class ArgonOledDevice:
 
         self._retry(operation, context="draw")
 
-    def _draw_element(self, drawer: ImageDraw.ImageDraw, canvas: Image.Image, element: dict[str, Any]) -> None:
+    def _draw_element(  # pylint: disable=too-many-locals
+        self, drawer: ImageDraw.ImageDraw, canvas: Image.Image, element: dict[str, Any]
+    ) -> None:
         """Draw one element onto the in-memory framebuffer."""
         element_type = str(element.get("type", "")).lower()
         if element_type not in SUPPORTED_ELEMENT_TYPES:
@@ -281,7 +290,7 @@ class ArgonOledDevice:
             y = self._clamp_y(element.get("y", 0))
             canvas.paste(image, (x, y))
 
-    def _load_font(self, font_size: Any) -> ImageFont.ImageFont:
+    def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Load a readable default font with optional size hint."""
         size = max(6, int(font_size)) if font_size is not None else 20
         try:
@@ -309,7 +318,7 @@ class ArgonOledDevice:
             raise DeviceNotFoundError(
                 f"I2C device not found on bus {self._bus} at address 0x{self._address:02x}: {err}"
             ) from err
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise DeviceInitializeError(f"Could not initialize SSD1306: {err}") from err
 
     def _require_state(self) -> _DeviceState:
@@ -327,6 +336,8 @@ class ArgonOledDevice:
     def _write_image(self, bus: SMBus, image: Image.Image) -> None:
         """Write image framebuffer to display pages."""
         pixels = image.load()
+        if pixels is None:
+            raise DeviceError("Could not get image pixel buffer")
         for page in range(_PAGE_COUNT):
             self._write_commands(
                 bus,
@@ -372,10 +383,8 @@ class ArgonOledDevice:
             return
 
         if hasattr(state.bus, "close"):
-            try:
+            with suppress(OSError):
                 state.bus.close()
-            except OSError:
-                pass
         self._state = None
 
     def _retry(self, func: Callable[[], T], context: str) -> T:
@@ -387,7 +396,7 @@ class ArgonOledDevice:
                 return func()
             except DeviceError as err:
                 last_error = err
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:  # pylint: disable=broad-exception-caught
                 last_error = DeviceError(str(err))
 
             _LOGGER.warning(

@@ -1,4 +1,4 @@
-name: Validate with hassfest
+name: Integration validation
 
 on:
   push:
@@ -8,9 +8,22 @@ on:
 
 jobs:
   hassfest:
+    name: Hassfest validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6.0.2
       - name: Run hassfest
         uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+      - name: Run HACS validation
+        uses: hacs/action@22.5.0
+        with:
+          category: integration
+          ignore: brands

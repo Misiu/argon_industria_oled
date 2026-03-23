@@ -6,6 +6,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -39,7 +40,7 @@ class _BaseDiagnosticSensor(CoordinatorEntity[ArgonIndustriaOledCoordinator], Se
         self._entry = entry
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Link sensor entities to the OLED device."""
         return {"identifiers": {(DOMAIN, self._entry.entry_id)}}
 
