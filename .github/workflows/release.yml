@@ -25,7 +25,7 @@ jobs:
           zip argon_industria_oled.zip -r ./
 
       - name: Upload zip to release
-        uses: svenstaro/upload-release-action@2.11.2
+        uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: custom_components/argon_industria_oled/argon_industria_oled.zip
