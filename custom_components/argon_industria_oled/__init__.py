@@ -25,7 +25,7 @@ from .device import DeviceError
 
 _LOGGER = logging.getLogger(__name__)
 
-INTEGRATION_CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)  # pylint: disable=invalid-name
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 DRAW_CUSTOM_SCHEMA = vol.Schema(
     {
