@@ -27,10 +27,19 @@ module = [
   "voluptuous.*",
   "PIL.*",
   "smbus2",
+  "gpiod",
+  "gpiod.line",
 ]
 ignore_missing_imports = true
 
 [tool.pylint."MESSAGES CONTROL"]
 disable = [
   "invalid-name",
+  "too-few-public-methods",
 ]
+
+[tool.pylint.TYPECHECK]
+# pylint cannot install homeassistant>=2026.x to verify names like
+# AddConfigEntryEntitiesCallback that were added after the latest
+# PyPI-installable release. Ignore all homeassistant module imports.
+ignored-modules = ["homeassistant"]

@@ -80,7 +80,11 @@ SUPPORTED_ELEMENT_TYPES = {
     ELEMENT_PIXEL,
 }
 
-PLATFORMS = ["sensor"]
+EVENT_SINGLE_PRESS = "single_press"
+EVENT_DOUBLE_PRESS = "double_press"
+EVENT_LONG_PRESS = "long_press"
+
+PLATFORMS = ["sensor", "event"]
 
 __all__ = [
     "ATTR_CLEAR",
@@ -100,6 +104,9 @@ __all__ = [
     "ELEMENT_PIXEL",
     "ELEMENT_RECTANGLE",
     "ELEMENT_TEXT",
+    "EVENT_DOUBLE_PRESS",
+    "EVENT_LONG_PRESS",
+    "EVENT_SINGLE_PRESS",
     "HEIGHT",
     "PLATFORMS",
     "RETRY_ATTEMPTS",

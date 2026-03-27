@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,6 +13,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .button_monitor import ButtonMonitor
 from .const import (
     CONF_SCREEN_TIMEOUT,
     COORDINATOR_UPDATE_INTERVAL,
@@ -40,6 +42,8 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._executor_lock = asyncio.Lock()
         self._cancel_timeout: CALLBACK_TYPE | None = None
         self._display_active: bool = False
+        self._button_monitor: ButtonMonitor | None = None
+        self._button_event_callback: Callable[[str], None] | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Refresh connectivity state without crashing the integration."""
@@ -52,10 +56,57 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def async_initialize(self) -> None:
-        """Initialize the device."""
+        """Initialize the device and start the button monitor."""
         async with self._executor_lock:
             await self.hass.async_add_executor_job(self.device.initialize)
         await self.async_set_status(connected=True, error=None)
+
+        self._button_monitor = ButtonMonitor(self._handle_button_event)
+        _LOGGER.debug("Starting button monitor…")
+        started = await self.hass.async_add_executor_job(self._button_monitor.start)
+        if started:
+            _LOGGER.info("Button monitoring started successfully")
+        else:
+            _LOGGER.info(
+                "Button monitoring is not available on this system "
+                "(gpiod not installed or no compatible GPIO chip found)"
+            )
+
+    # ------------------------------------------------------------------
+    # Button support
+    # ------------------------------------------------------------------
+
+    def set_button_event_callback(self, button_callback: Callable[[str], None]) -> None:
+        """Register the callable that the event entity exposes for firing events.
+
+        Only one callback is supported at a time. If called again, the previous
+        registration is replaced and a warning is logged.
+        """
+        if self._button_event_callback is not None:
+            _LOGGER.warning(
+                "Button event callback is being replaced; "
+                "the previous callback (%s) will no longer receive events",
+                self._button_event_callback,
+            )
+        self._button_event_callback = button_callback
+        _LOGGER.debug("Button event callback registered: %s", button_callback)
+
+    def _handle_button_event(self, event_type: str) -> None:
+        """Receive a press event from the monitor thread and dispatch to the HA loop."""
+        _LOGGER.debug("Button event received from monitor thread: %r", event_type)
+        if self._button_event_callback is not None:
+            _LOGGER.debug("Scheduling button event %r on the HA event loop", event_type)
+            self.hass.loop.call_soon_threadsafe(self._button_event_callback, event_type)
+        else:
+            _LOGGER.warning(
+                "Button event %r received but no callback is registered "
+                "(entity may not be set up yet)",
+                event_type,
+            )
+
+    # ------------------------------------------------------------------
+    # Display helpers (unchanged)
+    # ------------------------------------------------------------------
 
     async def async_show_startup(self) -> None:
         """Show splash screen and keep it visible."""
@@ -167,6 +218,10 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_shutdown(self) -> None:
         """Close hardware resources."""
         self._async_cancel_timeout()
+        if self._button_monitor is not None:
+            _LOGGER.debug("Stopping button monitor…")
+            await self.hass.async_add_executor_job(self._button_monitor.stop)
+            _LOGGER.debug("Button monitor stopped")
         await self.hass.async_add_executor_job(self.device.close)
 
     @staticmethod

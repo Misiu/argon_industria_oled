@@ -37,5 +37,21 @@
         }
       }
     }
+  },
+  "entity": {
+    "event": {
+      "button": {
+        "name": "Button",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "single_press": "Single press",
+              "double_press": "Double press",
+              "long_press": "Long press"
+            }
+          }
+        }
+      }
+    }
   }
 }
