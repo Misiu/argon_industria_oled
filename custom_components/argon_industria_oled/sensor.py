@@ -87,7 +87,6 @@ class ArgonOledScreenTimeoutSensor(_BaseDiagnosticSensor):
     """Expose the configured screen-off timeout (read-only; edit via integration options)."""
 
     _attr_name = "Screen timeout"
-    _attr_entity_category = EntityCategory.CONFIG
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
 
     def __init__(self, coordinator: ArgonIndustriaOledCoordinator, entry: ConfigEntry) -> None:
