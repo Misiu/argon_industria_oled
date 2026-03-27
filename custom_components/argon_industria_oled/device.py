@@ -21,6 +21,7 @@ except ImportError as err:  # pragma: no cover - runtime import guard
     raise RuntimeError("Pillow must be installed to use this integration") from err
 
 from .const import (
+    COLOR_BLACK,
     DEFAULT_I2C_ADDRESS,
     DEFAULT_I2C_BUS,
     DISPLAY_HEIGHT,
@@ -218,12 +219,14 @@ class ArgonOledDevice:
         if element_type not in SUPPORTED_ELEMENT_TYPES:
             raise DeviceError(f"Unsupported element type: {element_type}")
 
+        color = self._color_value(element)
+
         if element_type == ELEMENT_TEXT:
             font = self._load_font(element.get("size"))
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
             value = str(element.get("value", ""))
-            drawer.text((x, y), value, font=font, fill=1)
+            drawer.text((x, y), value, font=font, fill=color)
             return
 
         if element_type == ELEMENT_MULTILINE:
@@ -235,7 +238,7 @@ class ArgonOledDevice:
             offset_y = int(element.get("offset_y", 0))
             lines = str(element.get("value", "")).split(delimiter)
             value = "\n".join(lines)
-            drawer.multiline_text((x, y + offset_y), value, font=font, fill=1, spacing=spacing)
+            drawer.multiline_text((x, y + offset_y), value, font=font, fill=color, spacing=spacing)
             return
 
         if element_type == ELEMENT_LINE:
@@ -244,7 +247,7 @@ class ArgonOledDevice:
             x2 = self._clamp_x(element.get("x_end", 0))
             y2 = self._clamp_y(element.get("y_end", y1))
             width = max(1, int(element.get("width", 1)))
-            drawer.line((x1, y1, x2, y2), fill=1, width=width)
+            drawer.line((x1, y1, x2, y2), fill=color, width=width)
             return
 
         if element_type in (ELEMENT_RECTANGLE, ELEMENT_FILLED_RECTANGLE):
@@ -254,17 +257,17 @@ class ArgonOledDevice:
             y2 = self._clamp_y(element.get("y_end", y1))
 
             if element_type == ELEMENT_RECTANGLE:
-                fill = 1 if bool(element.get("fill", False)) else 0
-                drawer.rectangle((x1, y1, x2, y2), outline=1, fill=fill)
+                fill: int | None = color if bool(element.get("fill", False)) else None
+                drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill)
             else:
-                outline = 1 if bool(element.get("outline", True)) else 0
-                drawer.rectangle((x1, y1, x2, y2), outline=outline, fill=1)
+                outline: int | None = color if bool(element.get("outline", True)) else None
+                drawer.rectangle((x1, y1, x2, y2), outline=outline, fill=color)
             return
 
         if element_type == ELEMENT_PIXEL:
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
-            drawer.point((x, y), fill=1)
+            drawer.point((x, y), fill=color)
             return
 
         if element_type == ELEMENT_DLIMG:
@@ -293,12 +296,17 @@ class ArgonOledDevice:
             canvas.paste(image, (x, y))
 
     def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-        """Load a readable default font with optional size hint."""
+        """Load a readable default font with optional size hint.
+
+        Tries to load ``DejaVuSans.ttf`` from the system font path first.
+        Falls back to Pillow's built-in font at the same size (the ``size``
+        parameter for ``load_default`` was added in Pillow 10.1.0).
+        """
         size = max(6, int(font_size)) if font_size is not None else 20
         try:
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except OSError:
-            return ImageFont.load_default()
+            return ImageFont.load_default(size)
 
     def _init_device(self) -> None:
         """Open and initialize the OLED device if needed."""
@@ -421,6 +429,16 @@ class ArgonOledDevice:
 
         assert last_error is not None
         raise last_error
+
+    @staticmethod
+    def _color_value(element: dict[str, Any]) -> int:
+        """Return the Pillow fill value (0 = black, 1 = white) for an element.
+
+        Reads the optional ``color`` key from the element dictionary.
+        Accepts ``"black"`` for pixel-off (0) or any other value (including the
+        default ``"white"``) for pixel-on (1).
+        """
+        return 0 if str(element.get("color", "white")).lower() == COLOR_BLACK else 1
 
     @staticmethod
     def _clamp_x(value: Any) -> int:
