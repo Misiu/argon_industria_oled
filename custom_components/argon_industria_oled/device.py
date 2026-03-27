@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import time
 from collections.abc import Callable
@@ -385,6 +386,23 @@ class ArgonOledDevice:
                 bus.write_i2c_block_data(self._address, _DATA_CONTROL_BYTE, chunk)
             except OSError as err:
                 raise DeviceError(f"Failed to write OLED data: {err}") from err
+
+    def get_framebuffer_png_bytes(self) -> bytes | None:
+        """Return the current framebuffer as a scaled-up PNG, or None if not initialized.
+
+        The 1-bit monochrome framebuffer is converted to grayscale and scaled 4x
+        with nearest-neighbour resampling so the preview remains crisp and legible
+        in the Home Assistant UI.
+        """
+        if self._state is None:
+            return None
+        image = self._state.framebuffer.convert("L").resize(
+            (DISPLAY_WIDTH * 4, DISPLAY_HEIGHT * 4),
+            resample=Image.Resampling.NEAREST,
+        )
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        return buf.getvalue()
 
     def close(self) -> None:
         """Close runtime resources."""

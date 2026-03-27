@@ -52,6 +52,11 @@
           }
         }
       }
+    },
+    "image": {
+      "display_image": {
+        "name": "Display"
+      }
     }
   },
   "device_automation": {

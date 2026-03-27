@@ -82,7 +82,7 @@ EVENT_LONG_PRESS = "long_press"
 # automations in the automation UI.  The event carries `device_id` and `type`.
 EVENT_BUS_EVENT = f"{DOMAIN}_event"
 
-PLATFORMS = ["event"]
+PLATFORMS = ["event", "image"]
 
 __all__ = [
     "ATTR_CLEAR",
