@@ -36,3 +36,9 @@ ignore_missing_imports = true
 disable = [
   "invalid-name",
 ]
+
+[tool.pylint.TYPECHECK]
+# pylint cannot install homeassistant>=2026.x to verify names like
+# AddConfigEntryEntitiesCallback that were added after the latest
+# PyPI-installable release. Ignore all homeassistant module imports.
+ignored-modules = ["homeassistant"]
