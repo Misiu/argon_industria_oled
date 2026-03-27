@@ -50,7 +50,7 @@ class ArgonOledImageEntity(ImageEntity):
         self._coordinator = coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_display_image"
-        self._cached_image: bytes | None = None
+        self._png_cache: bytes | None = None
         self._attr_image_last_updated: datetime | None = None
 
     @property
@@ -69,7 +69,7 @@ class ArgonOledImageEntity(ImageEntity):
     def _handle_display_update(self) -> None:
         """Invalidate the image cache and update the entity state."""
         _LOGGER.debug("Display updated — refreshing image entity (unique_id=%s)", self.unique_id)
-        self._cached_image = None
+        self._png_cache = None
         self._attr_image_last_updated = dt_util.utcnow()
         self.async_write_ha_state()
 
@@ -79,8 +79,8 @@ class ArgonOledImageEntity(ImageEntity):
         Fetches fresh bytes from the device on first call after each display
         update; subsequent calls within the same update cycle use a cache.
         """
-        if self._cached_image is None:
-            self._cached_image = await self.hass.async_add_executor_job(
+        if self._png_cache is None:
+            self._png_cache = await self.hass.async_add_executor_job(
                 self._coordinator.get_display_image_bytes
             )
-        return self._cached_image
+        return self._png_cache
