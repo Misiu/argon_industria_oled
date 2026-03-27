@@ -137,7 +137,7 @@ class ButtonMonitor:
         if self._line_request is not None:
             _LOGGER.debug("Releasing GPIO line request")
             try:
-                self._line_request.release()  # type: ignore[union-attr]
+                self._line_request.release()
                 _LOGGER.debug("GPIO line request released")
             except Exception as err:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error releasing GPIO line request: %s", err)
@@ -146,7 +146,7 @@ class ButtonMonitor:
         if self._chip is not None:
             _LOGGER.debug("Closing GPIO chip handle")
             try:
-                self._chip.close()  # type: ignore[union-attr]
+                self._chip.close()
                 _LOGGER.debug("GPIO chip handle closed")
             except Exception as err:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error closing GPIO chip: %s", err)
@@ -166,12 +166,12 @@ class ButtonMonitor:
             path = f"/dev/gpiochip{idx}"
             _LOGGER.debug("Checking %s...", path)
 
-            if not gpiod.is_gpiochip_device(path):  # type: ignore[name-defined]
+            if not gpiod.is_gpiochip_device(path):
                 _LOGGER.debug("%s is not a gpiochip device, skipping", path)
                 continue
 
             _LOGGER.debug("%s is a gpiochip device, opening...", path)
-            chip = gpiod.Chip(path)  # type: ignore[name-defined]
+            chip = gpiod.Chip(path)
             info = chip.get_info()
             _LOGGER.debug(
                 "%s chip info: name=%r label=%r num_lines=%d",
@@ -200,9 +200,9 @@ class ButtonMonitor:
                 line_request = chip.request_lines(
                     consumer="argon_industria_oled",
                     config={
-                        self._pin: gpiod.LineSettings(  # type: ignore[name-defined]
-                            direction=Direction.INPUT,  # type: ignore[name-defined]
-                            bias=Bias.PULL_UP,  # type: ignore[name-defined]
+                        self._pin: gpiod.LineSettings(
+                            direction=Direction.INPUT,
+                            bias=Bias.PULL_UP,
                         )
                     },
                 )
@@ -255,7 +255,7 @@ class ButtonMonitor:
                         current_val,
                     )
 
-                if current_val != _LineValue.INACTIVE:  # type: ignore[name-defined]
+                if current_val != _LineValue.INACTIVE:
                     time.sleep(_POLL_INTERVAL)
                     continue
 
@@ -267,7 +267,7 @@ class ButtonMonitor:
                 while not self._stop_event.is_set():
                     released = (
                         self._line_request.get_value(self._pin)  # type: ignore[union-attr]
-                        != _LineValue.INACTIVE  # type: ignore[name-defined]
+                        != _LineValue.INACTIVE
                     )
                     if released:
                         break

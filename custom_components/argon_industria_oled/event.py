@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import ClassVar
 
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.config_entries import ConfigEntry
@@ -52,15 +51,11 @@ class ArgonButtonEventEntity(EventEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "button"
     _attr_device_class = EventDeviceClass.BUTTON
-    _attr_event_types: ClassVar[list[str]] = [
-        EVENT_SINGLE_PRESS,
-        EVENT_DOUBLE_PRESS,
-        EVENT_LONG_PRESS,
-    ]
 
     def __init__(self, entry: ConfigEntry) -> None:
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_button"
+        self._attr_event_types = [EVENT_SINGLE_PRESS, EVENT_DOUBLE_PRESS, EVENT_LONG_PRESS]
 
     @property
     def device_info(self) -> DeviceInfo:
