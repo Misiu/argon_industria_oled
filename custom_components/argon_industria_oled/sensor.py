@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     CONF_SCREEN_TIMEOUT,
     DEFAULT_I2C_ADDRESS,
+    DEFAULT_I2C_BUS,
     DEFAULT_SCREEN_TIMEOUT,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
@@ -28,13 +29,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up diagnostic sensors from config entry."""
     coordinator: ArgonIndustriaOledCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            ArgonOledAddressSensor(coordinator, entry),
-            ArgonOledResolutionSensor(coordinator, entry),
-            ArgonOledScreenTimeoutSensor(coordinator, entry),
-        ]
-    )
+    async_add_entities([ArgonOledScreenTimeoutSensor(coordinator, entry)])
 
 
 class _BaseDiagnosticSensor(CoordinatorEntity[ArgonIndustriaOledCoordinator], SensorEntity):
@@ -49,45 +44,25 @@ class _BaseDiagnosticSensor(CoordinatorEntity[ArgonIndustriaOledCoordinator], Se
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Link sensor entities to the OLED device."""
-        return {"identifiers": {(DOMAIN, self._entry.entry_id)}}
-
-
-class ArgonOledAddressSensor(_BaseDiagnosticSensor):
-    """Expose OLED I2C address for diagnostics."""
-
-    _attr_name = "Address"
-
-    def __init__(self, coordinator: ArgonIndustriaOledCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_address"
-
-    @property
-    def native_value(self) -> str:
-        """Return fixed OLED I2C address."""
-        return f"0x{DEFAULT_I2C_ADDRESS:02X}"
-
-
-class ArgonOledResolutionSensor(_BaseDiagnosticSensor):
-    """Expose OLED resolution for diagnostics."""
-
-    _attr_name = "Resolution"
-
-    def __init__(self, coordinator: ArgonIndustriaOledCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_resolution"
-
-    @property
-    def native_value(self) -> str:
-        """Return fixed OLED resolution."""
-        return f"{DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+        """Describe the physical OLED module for the device registry."""
+        hw_version = (
+            f"I2C {DEFAULT_I2C_BUS}@0x{DEFAULT_I2C_ADDRESS:02X} {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+        )
+        return {
+            "identifiers": {(DOMAIN, self._entry.entry_id)},
+            "name": "Argon Industria OLED",
+            "manufacturer": "Argon40",
+            "model": "Argon ONE V5 Industria OLED",
+            "configuration_url": "https://argon40.com/products/argon-one-v5-industria-oled-module",
+            "sw_version": "0.1.0",
+            "hw_version": hw_version,
+        }
 
 
 class ArgonOledScreenTimeoutSensor(_BaseDiagnosticSensor):
     """Expose the configured screen-off timeout (read-only; edit via integration options)."""
 
     _attr_name = "Screen timeout"
-    _attr_entity_category = EntityCategory.CONFIG
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
 
     def __init__(self, coordinator: ArgonIndustriaOledCoordinator, entry: ConfigEntry) -> None:

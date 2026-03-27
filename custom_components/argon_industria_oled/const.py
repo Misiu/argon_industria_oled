@@ -80,7 +80,7 @@ SUPPORTED_ELEMENT_TYPES = {
     ELEMENT_PIXEL,
 }
 
-PLATFORMS = ["binary_sensor", "sensor"]
+PLATFORMS = ["sensor"]
 
 __all__ = [
     "ATTR_CLEAR",
