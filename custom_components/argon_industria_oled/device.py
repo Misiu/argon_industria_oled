@@ -114,33 +114,35 @@ class ArgonOledDevice:
         return self._address
 
     def probe(self) -> bool:
-        """Return True when the display responds to initialization and clear operations."""
+        """Return True if the display responds to the SSD1306 initialization sequence.
 
-        def operation() -> bool:
-            self._init_device()
-            self.clear()
-            return True
-
+        Sends the standard init commands over I²C to verify the device is present
+        and reachable.  Does not write pixel data or alter the displayed content.
+        """
         try:
-            return self._retry(operation, context="probe")
+            self._init_device()
+            return True
         except DeviceError:
             return False
 
     def initialize(self) -> None:
-        """Initialize the OLED display and ensure it can be written."""
+        """Open the I²C bus and send the SSD1306 init sequence.
 
-        def operation() -> None:
-            self._init_device()
-            self.clear()
-
-        self._retry(operation, context="initialize")
+        Idempotent: safe to call multiple times; no-op when already initialized.
+        Does not clear or modify the framebuffer.
+        """
+        self._retry(self._init_device, context="initialize")
 
     def clear(self) -> None:
-        """Clear the display."""
-        state = self._require_state()
-        blank = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
-        self._write_image(state.bus, blank)
-        state.framebuffer = blank
+        """Clear the display and reset the framebuffer to black."""
+
+        def operation() -> None:
+            state = self._require_state()
+            blank = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
+            self._write_image(state.bus, blank)
+            state.framebuffer = blank
+
+        self._retry(operation, context="clear")
 
     def show_startup(self) -> None:
         """Render startup splash image from constant bitmap bytes."""
@@ -388,11 +390,17 @@ class ArgonOledDevice:
         self._state = None
 
     def _retry(self, func: Callable[[], T], context: str) -> T:
-        """Run operation with bounded retries for transient hardware faults."""
+        """Run *func* with bounded retries for transient hardware faults.
+
+        Calls ``_init_device()`` before each attempt so that the device is
+        always in a known-good state when *func* runs.  On failure the bus is
+        closed so the next attempt starts from a clean slate.
+        """
         last_error: Exception | None = None
 
         for attempt in range(1, RETRY_ATTEMPTS + 1):
             try:
+                self._init_device()  # no-op if already initialized
                 return func()
             except DeviceError as err:
                 last_error = err
