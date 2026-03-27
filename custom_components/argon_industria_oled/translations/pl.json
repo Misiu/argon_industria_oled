@@ -54,13 +54,6 @@
       }
     }
   },
-  "logbook": {
-    "argon_industria_oled_event": {
-      "single_press": "Pojedyncze naciśnięcie przycisku",
-      "double_press": "Podwójne naciśnięcie przycisku",
-      "long_press": "Długie naciśnięcie przycisku"
-    }
-  },
   "device_automation": {
     "trigger_type": {
       "single_press": "Pojedyncze naciśnięcie przycisku",

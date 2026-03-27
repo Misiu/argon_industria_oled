@@ -54,13 +54,6 @@
       }
     }
   },
-  "logbook": {
-    "argon_industria_oled_event": {
-      "single_press": "Button single press",
-      "double_press": "Button double press",
-      "long_press": "Button long press"
-    }
-  },
   "device_automation": {
     "trigger_type": {
       "single_press": "Button single press",
