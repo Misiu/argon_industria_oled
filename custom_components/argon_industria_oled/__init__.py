@@ -6,9 +6,9 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
@@ -25,6 +25,8 @@ from .device import DeviceError
 
 _LOGGER = logging.getLogger(__name__)
 
+type ArgonIndustriaOledConfigEntry = ConfigEntry[ArgonIndustriaOledCoordinator]
+
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 DRAW_CUSTOM_SCHEMA = vol.Schema(
@@ -36,111 +38,94 @@ DRAW_CUSTOM_SCHEMA = vol.Schema(
 )
 
 
-def _get_active_coordinator(hass: HomeAssistant) -> ArgonIndustriaOledCoordinator | None:
-    """Return the active single-entry coordinator, if available."""
-    entries = hass.data.get(DOMAIN, {})
-    if not entries:
-        return None
-    return next(iter(entries.values()))
+def _get_active_coordinator(hass: HomeAssistant) -> ArgonIndustriaOledCoordinator:
+    """Return the active coordinator or raise ``ServiceValidationError``."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.state is ConfigEntryState.LOADED:
+            return entry.runtime_data
+    raise ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="no_active_entry",
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
-    """Set up integration-wide services."""
+    """Register integration-wide services (called once at HA startup)."""
     del config
-    hass.data.setdefault(DOMAIN, {})
 
     async def async_handle_drawcustom(call: ServiceCall) -> None:
         coordinator = _get_active_coordinator(hass)
-        if coordinator is None:
-            _LOGGER.warning("No active Argon Industria OLED config entry")
-            return
-
-        clear = bool(call.data.get(ATTR_CLEAR, True))
-        elements = call.data.get(ATTR_PAYLOAD) or []
+        elements: list[Any] = call.data.get(ATTR_PAYLOAD) or []
         if not elements:
-            _LOGGER.error("drawcustom requires non-empty 'payload'")
-            return
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="empty_payload",
+            )
+        clear = bool(call.data.get(ATTR_CLEAR, True))
         try:
             await coordinator.async_draw(elements=elements, clear=clear)
         except DeviceError as err:
-            _LOGGER.error("drawcustom failed: %s", err)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="draw_failed",
+            ) from err
 
     async def async_handle_clear(call: ServiceCall) -> None:
         del call
         coordinator = _get_active_coordinator(hass)
-        if coordinator is None:
-            _LOGGER.warning("No active Argon Industria OLED config entry")
-            return
-
         try:
             await coordinator.async_clear()
         except DeviceError as err:
-            _LOGGER.error("clear failed: %s", err)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="clear_failed",
+            ) from err
 
     async def async_handle_show_logo(call: ServiceCall) -> None:
         del call
         coordinator = _get_active_coordinator(hass)
-        if coordinator is None:
-            _LOGGER.warning("No active Argon Industria OLED config entry")
-            return
-
         try:
             await coordinator.async_show_startup()
         except DeviceError as err:
-            _LOGGER.error("show_logo failed: %s", err)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="show_logo_failed",
+            ) from err
 
-    if not hass.services.has_service(DOMAIN, SERVICE_DRAW_CUSTOM):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_DRAW_CUSTOM,
-            async_handle_drawcustom,
-            schema=DRAW_CUSTOM_SCHEMA,
-        )
-
-    if not hass.services.has_service(DOMAIN, SERVICE_CLEAR):
-        hass.services.async_register(DOMAIN, SERVICE_CLEAR, async_handle_clear)
-
-    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_LOGO):
-        hass.services.async_register(DOMAIN, SERVICE_SHOW_LOGO, async_handle_show_logo)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DRAW_CUSTOM,
+        async_handle_drawcustom,
+        schema=DRAW_CUSTOM_SCHEMA,
+    )
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR, async_handle_clear)
+    hass.services.async_register(DOMAIN, SERVICE_SHOW_LOGO, async_handle_show_logo)
 
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ArgonIndustriaOledConfigEntry) -> bool:
     """Set up Argon Industria OLED from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
     coordinator = ArgonIndustriaOledCoordinator(hass, entry)
 
     try:
         await coordinator.async_initialize()
         await coordinator.async_show_startup()
-        await coordinator.async_config_entry_first_refresh()
     except DeviceError as err:
         raise ConfigEntryNotReady(f"OLED setup failed: {err}") from err
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
-
+    entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(coordinator.async_entry_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+async def async_unload_entry(hass: HomeAssistant, entry: ArgonIndustriaOledConfigEntry) -> bool:
+    """Unload a config entry and release hardware resources."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
 
-    coordinator: ArgonIndustriaOledCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
-    await coordinator.async_shutdown()
-
-    if not hass.data[DOMAIN]:
-        if hass.services.has_service(DOMAIN, SERVICE_DRAW_CUSTOM):
-            hass.services.async_remove(DOMAIN, SERVICE_DRAW_CUSTOM)
-        if hass.services.has_service(DOMAIN, SERVICE_CLEAR):
-            hass.services.async_remove(DOMAIN, SERVICE_CLEAR)
-        if hass.services.has_service(DOMAIN, SERVICE_SHOW_LOGO):
-            hass.services.async_remove(DOMAIN, SERVICE_SHOW_LOGO)
-
+    await entry.runtime_data.async_shutdown()
     return True

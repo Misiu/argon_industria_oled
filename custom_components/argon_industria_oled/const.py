@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 DOMAIN = "argon_industria_oled"
 
 DEFAULT_I2C_BUS = 1
@@ -11,8 +9,6 @@ DEFAULT_I2C_ADDRESS = 0x3C
 
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
-WIDTH = DISPLAY_WIDTH
-HEIGHT = DISPLAY_HEIGHT
 
 SPLASH = bytes.fromhex(
     """
@@ -41,8 +37,6 @@ SPLASH = bytes.fromhex(
     """
 )
 
-COORDINATOR_UPDATE_INTERVAL = timedelta(seconds=60)
-
 CONF_SCREEN_TIMEOUT = "screen_timeout"
 DEFAULT_SCREEN_TIMEOUT = 0
 
@@ -57,10 +51,6 @@ SERVICE_SHOW_LOGO = "show_logo"
 
 ATTR_CLEAR = "clear"
 ATTR_PAYLOAD = "payload"
-
-STATE_CONNECTED = "connected"
-STATE_LAST_ERROR = "last_error"
-STATE_LAST_DRAW_TIME = "last_draw_time"
 
 ELEMENT_TEXT = "text"
 ELEMENT_MULTILINE = "multiline"
@@ -84,15 +74,16 @@ EVENT_SINGLE_PRESS = "single_press"
 EVENT_DOUBLE_PRESS = "double_press"
 EVENT_LONG_PRESS = "long_press"
 
+# Fired on the HA event bus so that device_trigger.py can expose device
+# automations in the automation UI.  The event carries `device_id` and `type`.
 EVENT_BUS_EVENT = f"{DOMAIN}_event"
 
-PLATFORMS = ["sensor", "event"]
+PLATFORMS = ["event"]
 
 __all__ = [
     "ATTR_CLEAR",
     "ATTR_PAYLOAD",
     "CONF_SCREEN_TIMEOUT",
-    "COORDINATOR_UPDATE_INTERVAL",
     "DEFAULT_I2C_ADDRESS",
     "DEFAULT_I2C_BUS",
     "DEFAULT_SCREEN_TIMEOUT",
@@ -110,7 +101,6 @@ __all__ = [
     "EVENT_DOUBLE_PRESS",
     "EVENT_LONG_PRESS",
     "EVENT_SINGLE_PRESS",
-    "HEIGHT",
     "PLATFORMS",
     "RETRY_ATTEMPTS",
     "RETRY_DELAY_SECONDS",
@@ -118,10 +108,6 @@ __all__ = [
     "SERVICE_DRAW_CUSTOM",
     "SERVICE_SHOW_LOGO",
     "SPLASH",
-    "STATE_CONNECTED",
-    "STATE_LAST_DRAW_TIME",
-    "STATE_LAST_ERROR",
     "SUPPORTED_ELEMENT_TYPES",
     "UNIQUE_ID",
-    "WIDTH",
 ]

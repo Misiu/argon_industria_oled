@@ -1,4 +1,12 @@
-"""Device triggers for the Argon Industria OLED physical button."""
+"""Device triggers for the Argon Industria OLED physical button.
+
+Exposes ``single_press``, ``double_press``, and ``long_press`` as device
+automation triggers in the Home Assistant automation UI.
+
+Each trigger attaches to the ``argon_industria_oled_event`` bus event and
+filters by ``device_id`` and ``type`` so that automations only fire for the
+correct device and press type.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +31,7 @@ TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
 
 
 async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict]:
-    """Return device triggers for the Argon Industria OLED button."""
+    """Return the list of device triggers for an Argon Industria OLED device."""
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(device_id)
     if not device or not any(identifier[0] == DOMAIN for identifier in device.identifiers):
@@ -46,7 +54,7 @@ async def async_attach_trigger(
     action: TriggerActionType,
     trigger_info: TriggerInfo,
 ) -> event_trigger.CALLBACK_TYPE:
-    """Attach a trigger for a button press type."""
+    """Attach a trigger that fires when the matching button press event arrives."""
     event_config = event_trigger.TRIGGER_SCHEMA(
         {
             event_trigger.CONF_PLATFORM: "event",

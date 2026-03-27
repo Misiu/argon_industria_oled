@@ -96,6 +96,19 @@ All external I/O operations must be async or run in executor.
 
 ## Testing & Validation
 
+### Quality CI checks (`.github/workflows/quality.yaml`)
+All four checks **must pass** before every commit.  Run them in this order:
+
+```bash
+ruff format --check .         # format check — fix with: ruff format .
+ruff check .                  # lint
+mypy custom_components/argon_industria_oled
+pylint custom_components/argon_industria_oled
+```
+
+If `ruff format --check .` would reformat any file, run `ruff format .` to fix it and re-run the check.
+
+### Additional validation
 - **hassfest**: Run before committing (validates manifest.json and structure)
   ```bash
   hassfest
