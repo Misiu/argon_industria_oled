@@ -27,6 +27,8 @@ module = [
   "voluptuous.*",
   "PIL.*",
   "smbus2",
+  "gpiod",
+  "gpiod.line",
 ]
 ignore_missing_imports = true
 
