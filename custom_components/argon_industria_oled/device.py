@@ -257,7 +257,7 @@ class ArgonOledDevice:
             y2 = self._clamp_y(element.get("y_end", y1))
 
             if element_type == ELEMENT_RECTANGLE:
-                fill = color if bool(element.get("fill", False)) else None
+                fill: int | None = color if bool(element.get("fill", False)) else None
                 drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill)
             else:
                 outline: int | None = color if bool(element.get("outline", True)) else None
@@ -296,12 +296,17 @@ class ArgonOledDevice:
             canvas.paste(image, (x, y))
 
     def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-        """Load a readable default font with optional size hint."""
+        """Load a readable default font with optional size hint.
+
+        Tries to load ``DejaVuSans.ttf`` from the system font path first.
+        Falls back to Pillow's built-in font at the same size (the ``size``
+        parameter for ``load_default`` was added in Pillow 10.1.0).
+        """
         size = max(6, int(font_size)) if font_size is not None else 20
         try:
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except OSError:
-            return ImageFont.load_default()
+            return ImageFont.load_default(size)
 
     def _init_device(self) -> None:
         """Open and initialize the OLED device if needed."""

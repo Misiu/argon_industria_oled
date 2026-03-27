@@ -68,7 +68,7 @@ DISPLAY_HEIGHT = 64
 
 
 def _make_canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
-    """Return a blank (all-black) 128×64 monochrome image and its draw handle."""
+    """Return a blank (all-black) 128x64 monochrome image and its draw handle."""
     image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=0)
     return image, ImageDraw.Draw(image)
 
@@ -180,14 +180,28 @@ class TestLineElement(unittest.TestCase):
 
     def test_line_white_explicit(self) -> None:
         image = self._draw(
-            {"type": "line", "x_start": 0, "y_start": 32, "x_end": 20, "y_end": 32, "color": "white"}
+            {
+                "type": "line",
+                "x_start": 0,
+                "y_start": 32,
+                "x_end": 20,
+                "y_end": 32,
+                "color": "white",
+            }
         )
         self.assertTrue(_any_pixel_set(image, 0, 32, 20, 32))
 
     def test_line_black_does_not_set_pixels(self) -> None:
         """A black line on a black canvas leaves all pixels at 0."""
         image = self._draw(
-            {"type": "line", "x_start": 0, "y_start": 32, "x_end": 20, "y_end": 32, "color": "black"}
+            {
+                "type": "line",
+                "x_start": 0,
+                "y_start": 32,
+                "x_end": 20,
+                "y_end": 32,
+                "color": "black",
+            }
         )
         self.assertTrue(_all_pixels_clear(image, 0, 32, 20, 32))
 
@@ -198,7 +212,14 @@ class TestLineElement(unittest.TestCase):
         self.dev._draw_element(  # pylint: disable=protected-access
             draw,
             image,
-            {"type": "line", "x_start": 0, "y_start": 10, "x_end": 50, "y_end": 10, "color": "black"},
+            {
+                "type": "line",
+                "x_start": 0,
+                "y_start": 10,
+                "x_end": 50,
+                "y_end": 10,
+                "color": "black",
+            },
         )
         self.assertTrue(_all_pixels_clear(image, 0, 10, 50, 10))
 
@@ -359,17 +380,19 @@ class TestTextElement(unittest.TestCase):
         self.assertTrue(_any_pixel_set(image, 0, 0, 20, 15))
 
     def test_text_black_on_white_canvas_clears_pixels(self) -> None:
-        """Black text on a white canvas turns pixels off."""
-        image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=1)
-        draw = ImageDraw.Draw(image)
+        """Black text on a white canvas changes at least some pixels."""
+        from PIL import ImageChops
+
+        before = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=1)
+        after = before.copy()
+        draw = ImageDraw.Draw(after)
         self.dev._draw_element(  # pylint: disable=protected-access
             draw,
-            image,
+            after,
             {"type": "text", "x": 0, "y": 0, "value": "A", "size": 10, "color": "black"},
         )
-        # At least some pixels in the text area must have been cleared
-        region = image.crop((0, 0, 25, 20))
-        self.assertFalse(all(region.tobytes()))
+        diff = ImageChops.difference(before, after)
+        self.assertIsNotNone(diff.getbbox())
 
 
 # ---------------------------------------------------------------------------
@@ -389,21 +412,23 @@ class TestMultilineElement(unittest.TestCase):
         return image
 
     def test_multiline_white_default_sets_pixels(self) -> None:
-        image = self._draw(
-            {"type": "multiline", "x": 0, "y": 0, "value": "Hi|there", "size": 8}
-        )
+        image = self._draw({"type": "multiline", "x": 0, "y": 0, "value": "Hi|there", "size": 8})
         self.assertTrue(_any_pixel_set(image, 0, 0, 40, 30))
 
     def test_multiline_black_clears_on_white_canvas(self) -> None:
-        image = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=1)
-        draw = ImageDraw.Draw(image)
+        """Black multiline text on a white canvas changes at least some pixels."""
+        from PIL import ImageChops
+
+        before = Image.new("1", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=1)
+        after = before.copy()
+        draw = ImageDraw.Draw(after)
         self.dev._draw_element(  # pylint: disable=protected-access
             draw,
-            image,
+            after,
             {"type": "multiline", "x": 0, "y": 0, "value": "Hi|there", "size": 8, "color": "black"},
         )
-        region = image.crop((0, 0, 40, 30))
-        self.assertFalse(all(region.tobytes()))
+        diff = ImageChops.difference(before, after)
+        self.assertIsNotNone(diff.getbbox())
 
 
 # ---------------------------------------------------------------------------
