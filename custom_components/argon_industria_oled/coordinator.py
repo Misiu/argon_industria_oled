@@ -96,9 +96,7 @@ class ArgonIndustriaOledCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("Button event received from monitor thread: %r", event_type)
         if self._button_event_callback is not None:
             _LOGGER.debug("Scheduling button event %r on the HA event loop", event_type)
-            self.hass.loop.call_soon_threadsafe(
-                self._button_event_callback, event_type
-            )
+            self.hass.loop.call_soon_threadsafe(self._button_event_callback, event_type)
         else:
             _LOGGER.warning(
                 "Button event %r received but no callback is registered "

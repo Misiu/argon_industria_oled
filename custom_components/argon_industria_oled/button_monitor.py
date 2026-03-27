@@ -21,8 +21,8 @@ _CHIP_INDICES = (4, 0, 1, 2, 3, 5)
 # pulsetime = int(total_hold_seconds * 10), so pulsetime >= 6 means >= 0.6 s.
 _LONG_PRESS_PULSETIME = 6
 _DOUBLE_PRESS_WINDOW = 0.5  # seconds between two presses to count as double
-_DOUBLE_PRESS_WAIT = 0.3    # seconds to wait after release before classifying
-_POLL_INTERVAL = 0.05       # seconds between GPIO polls
+_DOUBLE_PRESS_WAIT = 0.3  # seconds to wait after release before classifying
+_POLL_INTERVAL = 0.05  # seconds between GPIO polls
 _THREAD_SHUTDOWN_TIMEOUT = 5.0  # seconds to wait for the monitor thread to exit cleanly
 # Number of poll iterations between heartbeat log messages (~10 s at default poll interval).
 _HEARTBEAT_INTERVAL_POLLS = int(10.0 / _POLL_INTERVAL)
@@ -289,8 +289,7 @@ class ButtonMonitor:
                 if gap < _DOUBLE_PRESS_WINDOW:
                     press_count += 1
                     _LOGGER.debug(
-                        "Press within double-press window "
-                        "(gap=%.3f s < %.1f s) -> press_count=%d",
+                        "Press within double-press window (gap=%.3f s < %.1f s) -> press_count=%d",
                         gap,
                         _DOUBLE_PRESS_WINDOW,
                         press_count,
