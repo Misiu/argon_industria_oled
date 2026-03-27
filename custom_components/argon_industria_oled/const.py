@@ -50,7 +50,11 @@ SERVICE_CLEAR = "clear"
 SERVICE_SHOW_LOGO = "show_logo"
 
 ATTR_CLEAR = "clear"
+ATTR_COLOR = "color"
 ATTR_PAYLOAD = "payload"
+
+COLOR_WHITE = "white"
+COLOR_BLACK = "black"
 
 ELEMENT_TEXT = "text"
 ELEMENT_MULTILINE = "multiline"
@@ -82,7 +86,10 @@ PLATFORMS = ["event"]
 
 __all__ = [
     "ATTR_CLEAR",
+    "ATTR_COLOR",
     "ATTR_PAYLOAD",
+    "COLOR_BLACK",
+    "COLOR_WHITE",
     "CONF_SCREEN_TIMEOUT",
     "DEFAULT_I2C_ADDRESS",
     "DEFAULT_I2C_BUS",
