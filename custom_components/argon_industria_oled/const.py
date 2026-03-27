@@ -74,6 +74,10 @@ EVENT_SINGLE_PRESS = "single_press"
 EVENT_DOUBLE_PRESS = "double_press"
 EVENT_LONG_PRESS = "long_press"
 
+# Fired on the HA event bus so that device_trigger.py can expose device
+# automations in the automation UI.  The event carries `device_id` and `type`.
+EVENT_BUS_EVENT = f"{DOMAIN}_event"
+
 PLATFORMS = ["event"]
 
 __all__ = [
@@ -93,6 +97,7 @@ __all__ = [
     "ELEMENT_PIXEL",
     "ELEMENT_RECTANGLE",
     "ELEMENT_TEXT",
+    "EVENT_BUS_EVENT",
     "EVENT_DOUBLE_PRESS",
     "EVENT_LONG_PRESS",
     "EVENT_SINGLE_PRESS",
