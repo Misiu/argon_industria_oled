@@ -33,7 +33,7 @@ _TIMEOUT_SELECTOR = selector.NumberSelector(
 
 class ArgonIndustriaOledConfigFlow(  # pylint: disable=abstract-method
     config_entries.ConfigFlow,
-    domain=DOMAIN,  # type: ignore[call-arg]
+    domain=DOMAIN,
 ):
     """Handle setup of the OLED module."""
 
