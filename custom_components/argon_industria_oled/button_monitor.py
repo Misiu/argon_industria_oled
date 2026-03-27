@@ -20,8 +20,7 @@ _CHIP_INDICES = (4, 0, 1, 2, 3, 5)
 # Press classification thresholds (mirror the logic from the reference add-on).
 # pulsetime = int(total_hold_seconds * 10), so pulsetime >= 6 means >= 0.6 s.
 _LONG_PRESS_PULSETIME = 6
-_DOUBLE_PRESS_WINDOW = 0.5  # seconds between two presses to count as double
-_DOUBLE_PRESS_WAIT = 0.3  # seconds to wait after release before classifying
+_DOUBLE_PRESS_WINDOW = 0.5  # seconds to wait for a second press after the first
 _POLL_INTERVAL = 0.05  # seconds between GPIO polls
 _THREAD_SHUTDOWN_TIMEOUT = 5.0  # seconds to wait for the monitor thread to exit cleanly
 # Number of poll iterations between heartbeat log messages (~10 s at default poll interval).
@@ -230,6 +229,49 @@ class ButtonMonitor:
         )
         return None, None
 
+    def _wait_for_release(self, press_start: float) -> tuple[float, int]:
+        """Poll until the button pin goes high (released).
+
+        Returns ``(total_hold_seconds, pulsetime)`` where
+        ``pulsetime = int(total_hold * 10)``.
+        """
+        while not self._stop_event.is_set():
+            if (
+                self._line_request.get_value(self._pin)  # type: ignore[union-attr]
+                != _LineValue.INACTIVE
+            ):
+                break
+            time.sleep(_POLL_INTERVAL)
+        total_hold = time.monotonic() - press_start
+        return total_hold, int(total_hold * 10)
+
+    def _check_for_second_press(self, deadline: float) -> str | None:
+        """Poll the pin until *deadline* looking for a second press.
+
+        Returns the event type string (``"double_press"`` or ``"long_press"``)
+        when a second press is detected within the window, or ``None`` when
+        the window expires without one.
+        """
+        while time.monotonic() < deadline and not self._stop_event.is_set():
+            if (
+                self._line_request.get_value(self._pin)  # type: ignore[union-attr]
+                == _LineValue.INACTIVE
+            ):
+                p2_start = time.monotonic()
+                _LOGGER.debug("Second press detected on pin %d - waiting for release...", self._pin)
+                p2_hold, p2_pulsetime = self._wait_for_release(p2_start)
+                _LOGGER.debug(
+                    "Second press released on pin %d (hold=%.3f s, pulsetime=%d)",
+                    self._pin,
+                    p2_hold,
+                    p2_pulsetime,
+                )
+                if p2_pulsetime >= _LONG_PRESS_PULSETIME:
+                    return "long_press"
+                return "double_press"
+            time.sleep(_POLL_INTERVAL)
+        return None
+
     def _monitor_loop(self) -> None:
         """Main polling loop - runs in its own daemon thread."""
         _LOGGER.debug(
@@ -238,8 +280,6 @@ class ButtonMonitor:
             _POLL_INTERVAL,
         )
 
-        last_press_time = 0.0
-        press_count = 0
         iterations = 0
 
         while not self._stop_event.is_set():
@@ -262,21 +302,7 @@ class ButtonMonitor:
                 # Button pressed (active-low with pull-up resistor)
                 press_start = time.monotonic()
                 _LOGGER.debug("Button pressed on pin %d - waiting for release...", self._pin)
-
-                # Wait for release
-                while not self._stop_event.is_set():
-                    released = (
-                        self._line_request.get_value(self._pin)  # type: ignore[union-attr]
-                        != _LineValue.INACTIVE
-                    )
-                    if released:
-                        break
-                    time.sleep(_POLL_INTERVAL)
-
-                press_end = time.monotonic()
-                total_hold = press_end - press_start
-                pulsetime = int(total_hold * 10)
-
+                total_hold, pulsetime = self._wait_for_release(press_start)
                 _LOGGER.debug(
                     "Button released on pin %d - hold=%.3f s, pulsetime=%d",
                     self._pin,
@@ -284,31 +310,39 @@ class ButtonMonitor:
                     pulsetime,
                 )
 
-                # Track double-press timing
-                gap = press_end - last_press_time
-                if gap < _DOUBLE_PRESS_WINDOW:
-                    press_count += 1
-                    _LOGGER.debug(
-                        "Press within double-press window (gap=%.3f s < %.1f s) -> press_count=%d",
-                        gap,
-                        _DOUBLE_PRESS_WINDOW,
-                        press_count,
+                # Long press: classify immediately — no double-press check required.
+                if pulsetime >= _LONG_PRESS_PULSETIME:
+                    _LOGGER.info(
+                        "Button event: long_press (pulsetime=%d >= %d, hold=%.3f s)",
+                        pulsetime,
+                        _LONG_PRESS_PULSETIME,
+                        total_hold,
                     )
-                else:
-                    press_count = 1
-                    _LOGGER.debug(
-                        "New press sequence (gap=%.3f s >= %.1f s) -> press_count=1",
-                        gap,
-                        _DOUBLE_PRESS_WINDOW,
+                    self._on_event("long_press")
+                    continue
+
+                # Short press: actively poll for a second press within the window.
+                # Using an active poll (instead of time.sleep) ensures the second
+                # tap is never missed even if it arrives immediately after release.
+                _LOGGER.debug(
+                    "Short press detected (pulsetime=%d). "
+                    "Waiting up to %.2f s for a second press...",
+                    pulsetime,
+                    _DOUBLE_PRESS_WINDOW,
+                )
+                deadline = time.monotonic() + _DOUBLE_PRESS_WINDOW
+                second_press_event = self._check_for_second_press(deadline)
+
+                if second_press_event is not None:
+                    _LOGGER.info("Button event: %s", second_press_event)
+                    self._on_event(second_press_event)
+                elif not self._stop_event.is_set():
+                    _LOGGER.info(
+                        "Button event: single_press (pulsetime=%d, hold=%.3f s)",
+                        pulsetime,
+                        total_hold,
                     )
-
-                last_press_time = press_end
-
-                # Wait briefly to detect a possible follow-up press
-                _LOGGER.debug("Waiting %.2f s for possible follow-up press...", _DOUBLE_PRESS_WAIT)
-                time.sleep(_DOUBLE_PRESS_WAIT)
-
-                press_count = self._classify_and_fire(press_count, pulsetime, total_hold)
+                    self._on_event("single_press")
 
             except Exception as err:  # pylint: disable=broad-exception-caught
                 _LOGGER.error(
@@ -320,37 +354,3 @@ class ButtonMonitor:
                 time.sleep(1.0)
 
         _LOGGER.debug("Button monitor loop exited (pin=%d)", self._pin)
-
-    def _classify_and_fire(self, press_count: int, pulsetime: int, total_hold: float) -> int:
-        """Classify a completed press and fire the appropriate event.
-
-        Returns the updated ``press_count`` (0 after firing, unchanged otherwise).
-        """
-        if press_count >= 2:
-            _LOGGER.info("Button event: double_press (press_count=%d)", press_count)
-            self._on_event("double_press")
-            return 0
-        if pulsetime >= _LONG_PRESS_PULSETIME:
-            _LOGGER.info(
-                "Button event: long_press (pulsetime=%d >= %d, hold=%.3f s)",
-                pulsetime,
-                _LONG_PRESS_PULSETIME,
-                total_hold,
-            )
-            self._on_event("long_press")
-            return 0
-        if press_count == 1:
-            _LOGGER.info(
-                "Button event: single_press (pulsetime=%d, hold=%.3f s)",
-                pulsetime,
-                total_hold,
-            )
-            self._on_event("single_press")
-            return 0
-
-        _LOGGER.debug(
-            "Button press not classified (press_count=%d, pulsetime=%d)",
-            press_count,
-            pulsetime,
-        )
-        return press_count
