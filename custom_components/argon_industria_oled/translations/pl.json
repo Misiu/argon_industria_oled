@@ -1,0 +1,64 @@
+{
+  "title": "Argon Industria OLED",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wykryj Argon Industria OLED",
+        "description": "Integracja automatycznie wykrywa wyświetlacz SSD1306 na magistrali I²C 1 pod adresem 0x3C. Ustaw limit czasu, aby automatycznie wyczyścić ekran po bezczynności (0 = wyłączone).",
+        "data": {
+          "screen_timeout": "Limit czasu ekranu"
+        },
+        "data_description": {
+          "screen_timeout": "Liczba sekund bezczynności przed wyczyszczeniem ekranu. Ustaw 0, aby wyłączyć."
+        }
+      }
+    },
+    "abort": {
+      "display_not_found": "Nie wykryto wyświetlacza OLED na magistrali I²C 1 pod adresem 0x3C.",
+      "cannot_initialize_display": "Wykryto wyświetlacz OLED, ale nie można go zainicjalizować.",
+      "unknown": "Wystąpił nieznany błąd podczas wykrywania wyświetlacza.",
+      "single_instance_allowed": "Obsługiwana jest tylko jedna konfiguracja Argon Industria OLED."
+    },
+    "error": {
+      "display_not_found": "Nie wykryto wyświetlacza OLED na magistrali I²C 1 pod adresem 0x3C.",
+      "cannot_initialize_display": "Wykryto wyświetlacz OLED, ale nie można go zainicjalizować.",
+      "unknown": "Wystąpił nieznany błąd podczas wykrywania wyświetlacza."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Argon Industria OLED",
+        "data": {
+          "screen_timeout": "Limit czasu ekranu"
+        },
+        "data_description": {
+          "screen_timeout": "Liczba sekund bezczynności przed wyczyszczeniem ekranu. Ustaw 0, aby wyłączyć."
+        }
+      }
+    }
+  },
+  "entity": {
+    "event": {
+      "button": {
+        "name": "Przycisk",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "single_press": "Pojedyncze naciśnięcie",
+              "double_press": "Podwójne naciśnięcie",
+              "long_press": "Długie naciśnięcie"
+            }
+          }
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "single_press": "Pojedyncze naciśnięcie przycisku",
+      "double_press": "Podwójne naciśnięcie przycisku",
+      "long_press": "Długie naciśnięcie przycisku"
+    }
+  }
+}
