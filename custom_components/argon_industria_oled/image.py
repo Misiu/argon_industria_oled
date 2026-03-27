@@ -73,14 +73,13 @@ class ArgonOledImageEntity(ImageEntity):
         self._attr_image_last_updated = dt_util.utcnow()
         self.async_write_ha_state()
 
-    async def async_image(self) -> bytes | None:
+    def image(self) -> bytes | None:
         """Return the current OLED framebuffer as a PNG.
 
-        Fetches fresh bytes from the device on first call after each display
-        update; subsequent calls within the same update cycle use a cache.
+        Called by the base-class ``async_image`` via the executor.  Fetches
+        fresh bytes from the device on first call after each display update;
+        subsequent calls within the same update cycle use a local cache.
         """
         if self._png_cache is None:
-            self._png_cache = await self.hass.async_add_executor_job(
-                self._coordinator.get_display_image_bytes
-            )
+            self._png_cache = self._coordinator.get_display_image_bytes()
         return self._png_cache
