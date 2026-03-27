@@ -41,6 +41,7 @@ class ArgonIndustriaOledCoordinator:
         self._display_active: bool = False
         self._button_monitor: ButtonMonitor | None = None
         self._button_callbacks: list[Callable[[str], None]] = []
+        self._display_callbacks: list[Callable[[], None]] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -97,6 +98,40 @@ class ArgonIndustriaOledCoordinator:
             self.hass.loop.call_soon_threadsafe(cb, event_type)
 
     # ------------------------------------------------------------------
+    # Display update subscription
+    # ------------------------------------------------------------------
+
+    def subscribe_display_update(self, cb: Callable[[], None]) -> Callable[[], None]:
+        """Subscribe *cb* to display update events.
+
+        *cb* is invoked on the HA event loop each time the display content
+        changes (draw, clear, or startup splash).  Returns an unsubscribe
+        callable suitable for ``Entity.async_on_remove``.
+        """
+        self._display_callbacks.append(cb)
+        _LOGGER.debug("Display update callback registered: %s", cb)
+
+        def unsubscribe() -> None:
+            with suppress(ValueError):
+                self._display_callbacks.remove(cb)
+            _LOGGER.debug("Display update callback unregistered: %s", cb)
+
+        return unsubscribe
+
+    def _notify_display_updated(self) -> None:
+        """Notify all display update subscribers (called from the HA event loop)."""
+        for cb in list(self._display_callbacks):
+            cb()
+
+    def get_display_image_bytes(self) -> bytes | None:
+        """Return the current framebuffer as PNG bytes.
+
+        Blocking — intended to be called via ``hass.async_add_executor_job``.
+        Returns ``None`` when the device has not been initialized yet.
+        """
+        return self.device.get_framebuffer_png_bytes()
+
+    # ------------------------------------------------------------------
     # Display operations
     # ------------------------------------------------------------------
 
@@ -106,6 +141,7 @@ class ArgonIndustriaOledCoordinator:
             await self.hass.async_add_executor_job(self.device.show_startup)
         self._display_active = True
         self._async_schedule_timeout()
+        self._notify_display_updated()
 
     async def async_draw(self, elements: list[dict[str, Any]], clear: bool) -> None:
         """Draw custom elements and schedule the inactivity timeout."""
@@ -113,6 +149,7 @@ class ArgonIndustriaOledCoordinator:
             await self.hass.async_add_executor_job(self.device.draw, elements, clear)
         self._display_active = True
         self._async_schedule_timeout()
+        self._notify_display_updated()
 
     async def async_clear(self) -> None:
         """Clear the display and cancel any pending inactivity timeout."""
@@ -120,6 +157,7 @@ class ArgonIndustriaOledCoordinator:
             await self.hass.async_add_executor_job(self.device.clear)
         self._display_active = False
         self._async_cancel_timeout()
+        self._notify_display_updated()
 
     # ------------------------------------------------------------------
     # Screen timeout

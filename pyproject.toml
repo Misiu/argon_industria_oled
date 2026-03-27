@@ -42,7 +42,7 @@ disable = [
 ]
 
 [tool.pylint.DESIGN]
-max-attributes = 8
+max-attributes = 9
 
 [tool.pylint.TYPECHECK]
 # pylint cannot install homeassistant>=2026.x to verify names like
