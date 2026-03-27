@@ -65,9 +65,7 @@ class ArgonButtonEventEntity(EventEntity):
 
     async def async_added_to_hass(self) -> None:
         """Register button callback when entity joins HA."""
-        self.async_on_remove(
-            self._coordinator.subscribe_button_event(self._handle_button_event)
-        )
+        self.async_on_remove(self._coordinator.subscribe_button_event(self._handle_button_event))
         _LOGGER.debug("Button event entity registered (unique_id=%s)", self.unique_id)
 
     @callback
@@ -93,4 +91,3 @@ class ArgonButtonEventEntity(EventEntity):
             EVENT_BUS_EVENT,
             {"device_id": device.id, "type": event_type},
         )
-

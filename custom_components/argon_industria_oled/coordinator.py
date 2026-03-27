@@ -177,4 +177,3 @@ class ArgonIndustriaOledCoordinator:
             )
         )
         self.async_update_timeout(timeout)
-

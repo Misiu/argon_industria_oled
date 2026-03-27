@@ -16,6 +16,20 @@ Welcome! This repository hosts the Home Assistant custom integration for the Arg
 - Documentation belongs in `README.md`. If you add new configuration options, ensure they are described there as well as in config flow strings.
 
 ## Testing & Tooling
+
+### Quality CI checks (`.github/workflows/quality.yaml`)
+All four checks **must pass** before every commit.  Run them in this order:
+
+```bash
+ruff format --check .         # format check — fixes: ruff format .
+ruff check .                  # lint
+mypy custom_components/argon_industria_oled
+pylint custom_components/argon_industria_oled
+```
+
+If `ruff format --check .` fails, auto-fix with `ruff format .` and re-verify.
+
+### Additional validation
 - Before committing, run `hassfest` and the HACS action locally when possible. Workflows must remain green.
 - When adding Python dependencies, pin exact versions in `manifest.json` and justify them in code comments if they are hardware-specific.
 
