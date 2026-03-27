@@ -53,5 +53,12 @@
         }
       }
     }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "single_press": "Button single press",
+      "double_press": "Button double press",
+      "long_press": "Button long press"
+    }
   }
 }

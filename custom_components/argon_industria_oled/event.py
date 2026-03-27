@@ -7,6 +7,7 @@ import logging
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -16,6 +17,7 @@ from .const import (
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
     DOMAIN,
+    EVENT_BUS_EVENT,
     EVENT_DOUBLE_PRESS,
     EVENT_LONG_PRESS,
     EVENT_SINGLE_PRESS,
@@ -83,3 +85,21 @@ class ArgonButtonEventEntity(EventEntity):
         self._trigger_event(event_type)
         self.async_write_ha_state()
         _LOGGER.debug("Button event %r written to state", event_type)
+
+        # Also fire on the HA event bus so device triggers can attach.
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, self._entry.entry_id)})
+        if device is None:
+            _LOGGER.warning(
+                "Device not found in registry for entry %s; "
+                "device trigger bus event will not be fired",
+                self._entry.entry_id,
+            )
+            return
+        self.hass.bus.async_fire(
+            EVENT_BUS_EVENT,
+            {
+                "device_id": device.id,
+                "type": event_type,
+            },
+        )
