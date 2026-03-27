@@ -11,12 +11,12 @@ from .const import DEFAULT_I2C_ADDRESS, DEFAULT_I2C_BUS, DISPLAY_HEIGHT, DISPLAY
 def build_device_info(entry: ConfigEntry) -> DeviceInfo:
     """Return a consistent ``DeviceInfo`` for all entities in this integration.
 
-    Hardware version is derived from the config entry so it reflects the actual
-    bus and address used, rather than compile-time defaults.
+    Hardware version uses the fixed I²C bus and address constants since the
+    Argon Industria OLED is always on bus 1 at address 0x3C.
     """
-    bus: int = entry.data.get("bus", DEFAULT_I2C_BUS)
-    address: int = entry.data.get("address", DEFAULT_I2C_ADDRESS)
-    hw_version = f"I2C {bus}@0x{address:02X} {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+    hw_version = (
+        f"I2C {DEFAULT_I2C_BUS}@0x{DEFAULT_I2C_ADDRESS:02X} {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+    )
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name="Argon Industria OLED",

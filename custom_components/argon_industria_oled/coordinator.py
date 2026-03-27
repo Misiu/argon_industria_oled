@@ -15,8 +15,6 @@ from homeassistant.helpers.event import async_call_later
 from .button_monitor import ButtonMonitor
 from .const import (
     CONF_SCREEN_TIMEOUT,
-    DEFAULT_I2C_ADDRESS,
-    DEFAULT_I2C_BUS,
     DEFAULT_SCREEN_TIMEOUT,
 )
 from .device import ArgonOledDevice, DeviceError
@@ -37,10 +35,7 @@ class ArgonIndustriaOledCoordinator:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
-        self.device = ArgonOledDevice(
-            bus=entry.data.get("bus", DEFAULT_I2C_BUS),
-            address=entry.data.get("address", DEFAULT_I2C_ADDRESS),
-        )
+        self.device = ArgonOledDevice()
         self._executor_lock = asyncio.Lock()
         self._cancel_timeout: CALLBACK_TYPE | None = None
         self._display_active: bool = False

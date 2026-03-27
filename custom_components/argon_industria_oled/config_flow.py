@@ -12,8 +12,6 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_SCREEN_TIMEOUT,
-    DEFAULT_I2C_ADDRESS,
-    DEFAULT_I2C_BUS,
     DEFAULT_SCREEN_TIMEOUT,
     DOMAIN,
     UNIQUE_ID,
@@ -50,7 +48,7 @@ class ArgonIndustriaOledConfigFlow(  # pylint: disable=abstract-method
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            display = ArgonOledDevice(bus=DEFAULT_I2C_BUS, address=DEFAULT_I2C_ADDRESS)
+            display = ArgonOledDevice()
             try:
                 found = await self.hass.async_add_executor_job(display.probe)
                 if not found:
@@ -59,8 +57,6 @@ class ArgonIndustriaOledConfigFlow(  # pylint: disable=abstract-method
                     return self.async_create_entry(
                         title="Argon Industria OLED",
                         data={
-                            "bus": DEFAULT_I2C_BUS,
-                            "address": DEFAULT_I2C_ADDRESS,
                             CONF_SCREEN_TIMEOUT: int(user_input[CONF_SCREEN_TIMEOUT]),
                         },
                     )
