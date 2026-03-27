@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEFAULT_I2C_ADDRESS, DISPLAY_HEIGHT, DISPLAY_WIDTH, DOMAIN
+from .const import (
+    CONF_SCREEN_TIMEOUT,
+    DEFAULT_I2C_ADDRESS,
+    DEFAULT_SCREEN_TIMEOUT,
+    DISPLAY_HEIGHT,
+    DISPLAY_WIDTH,
+    DOMAIN,
+)
 from .coordinator import ArgonIndustriaOledCoordinator
 
 
@@ -25,6 +32,7 @@ async def async_setup_entry(
         [
             ArgonOledAddressSensor(coordinator, entry),
             ArgonOledResolutionSensor(coordinator, entry),
+            ArgonOledScreenTimeoutSensor(coordinator, entry),
         ]
     )
 
@@ -73,3 +81,25 @@ class ArgonOledResolutionSensor(_BaseDiagnosticSensor):
     def native_value(self) -> str:
         """Return fixed OLED resolution."""
         return f"{DISPLAY_WIDTH}x{DISPLAY_HEIGHT}"
+
+
+class ArgonOledScreenTimeoutSensor(_BaseDiagnosticSensor):
+    """Expose the configured screen-off timeout (read-only; edit via integration options)."""
+
+    _attr_name = "Screen timeout"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+
+    def __init__(self, coordinator: ArgonIndustriaOledCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_screen_timeout"
+
+    @property
+    def native_value(self) -> int:
+        """Return the configured screen timeout in seconds (0 = disabled)."""
+        return int(
+            self._entry.options.get(
+                CONF_SCREEN_TIMEOUT,
+                self._entry.data.get(CONF_SCREEN_TIMEOUT, DEFAULT_SCREEN_TIMEOUT),
+            )
+        )

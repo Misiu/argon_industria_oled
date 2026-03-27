@@ -4,7 +4,13 @@
     "step": {
       "user": {
         "title": "Detect Argon Industria OLED",
-        "description": "The integration automatically detects an SSD1306 display on I²C bus 1 at address 0x3C."
+        "description": "The integration automatically detects an SSD1306 display on I²C bus 1 at address 0x3C. Set a timeout to automatically clear the screen after inactivity (0 = disabled).",
+        "data": {
+          "screen_timeout": "Screen timeout"
+        },
+        "data_description": {
+          "screen_timeout": "Seconds of inactivity before the screen is cleared. Set to 0 to disable."
+        }
       }
     },
     "abort": {
@@ -17,6 +23,19 @@
       "display_not_found": "The OLED display was not detected at I²C bus 1 address 0x3C.",
       "cannot_initialize_display": "The OLED was detected but could not be initialized.",
       "unknown": "An unknown error occurred during display detection."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Argon Industria OLED options",
+        "data": {
+          "screen_timeout": "Screen timeout"
+        },
+        "data_description": {
+          "screen_timeout": "Seconds of inactivity before the screen is cleared. Set to 0 to disable."
+        }
+      }
     }
   }
 }
