@@ -38,6 +38,9 @@ disable = [
   "too-few-public-methods",
 ]
 
+[tool.pylint.DESIGN]
+max-attributes = 8
+
 [tool.pylint.TYPECHECK]
 # pylint cannot install homeassistant>=2026.x to verify names like
 # AddConfigEntryEntitiesCallback that were added after the latest
