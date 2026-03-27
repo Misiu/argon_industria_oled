@@ -229,6 +229,49 @@ class ButtonMonitor:
         )
         return None, None
 
+    def _wait_for_release(self, press_start: float) -> tuple[float, int]:
+        """Poll until the button pin goes high (released).
+
+        Returns ``(total_hold_seconds, pulsetime)`` where
+        ``pulsetime = int(total_hold * 10)``.
+        """
+        while not self._stop_event.is_set():
+            if (
+                self._line_request.get_value(self._pin)  # type: ignore[union-attr]
+                != _LineValue.INACTIVE
+            ):
+                break
+            time.sleep(_POLL_INTERVAL)
+        total_hold = time.monotonic() - press_start
+        return total_hold, int(total_hold * 10)
+
+    def _check_for_second_press(self, deadline: float) -> str | None:
+        """Poll the pin until *deadline* looking for a second press.
+
+        Returns the event type string (``"double_press"`` or ``"long_press"``)
+        when a second press is detected within the window, or ``None`` when
+        the window expires without one.
+        """
+        while time.monotonic() < deadline and not self._stop_event.is_set():
+            if (
+                self._line_request.get_value(self._pin)  # type: ignore[union-attr]
+                == _LineValue.INACTIVE
+            ):
+                p2_start = time.monotonic()
+                _LOGGER.debug("Second press detected on pin %d - waiting for release...", self._pin)
+                p2_hold, p2_pulsetime = self._wait_for_release(p2_start)
+                _LOGGER.debug(
+                    "Second press released on pin %d (hold=%.3f s, pulsetime=%d)",
+                    self._pin,
+                    p2_hold,
+                    p2_pulsetime,
+                )
+                if p2_pulsetime >= _LONG_PRESS_PULSETIME:
+                    return "long_press"
+                return "double_press"
+            time.sleep(_POLL_INTERVAL)
+        return None
+
     def _monitor_loop(self) -> None:
         """Main polling loop - runs in its own daemon thread."""
         _LOGGER.debug(
@@ -259,20 +302,7 @@ class ButtonMonitor:
                 # Button pressed (active-low with pull-up resistor)
                 press_start = time.monotonic()
                 _LOGGER.debug("Button pressed on pin %d - waiting for release...", self._pin)
-
-                # Wait for release
-                while not self._stop_event.is_set():
-                    if (
-                        self._line_request.get_value(self._pin)  # type: ignore[union-attr]
-                        != _LineValue.INACTIVE
-                    ):
-                        break
-                    time.sleep(_POLL_INTERVAL)
-
-                press_end = time.monotonic()
-                total_hold = press_end - press_start
-                pulsetime = int(total_hold * 10)
-
+                total_hold, pulsetime = self._wait_for_release(press_start)
                 _LOGGER.debug(
                     "Button released on pin %d - hold=%.3f s, pulsetime=%d",
                     self._pin,
@@ -300,56 +330,13 @@ class ButtonMonitor:
                     pulsetime,
                     _DOUBLE_PRESS_WINDOW,
                 )
-                deadline = press_end + _DOUBLE_PRESS_WINDOW
-                second_press_handled = False
+                deadline = time.monotonic() + _DOUBLE_PRESS_WINDOW
+                second_press_event = self._check_for_second_press(deadline)
 
-                while time.monotonic() < deadline and not self._stop_event.is_set():
-                    if (
-                        self._line_request.get_value(self._pin)  # type: ignore[union-attr]
-                        == _LineValue.INACTIVE
-                    ):
-                        # Second press detected within the double-press window.
-                        p2_start = time.monotonic()
-                        _LOGGER.debug(
-                            "Second press detected on pin %d - waiting for release...", self._pin
-                        )
-                        while not self._stop_event.is_set():
-                            if (
-                                self._line_request.get_value(self._pin)  # type: ignore[union-attr]
-                                != _LineValue.INACTIVE
-                            ):
-                                break
-                            time.sleep(_POLL_INTERVAL)
-
-                        p2_hold = time.monotonic() - p2_start
-                        p2_pulsetime = int(p2_hold * 10)
-                        _LOGGER.debug(
-                            "Second press released on pin %d (hold=%.3f s, pulsetime=%d)",
-                            self._pin,
-                            p2_hold,
-                            p2_pulsetime,
-                        )
-
-                        if p2_pulsetime >= _LONG_PRESS_PULSETIME:
-                            # The second tap was a long hold — treat it as long_press.
-                            _LOGGER.info(
-                                "Button event: long_press "
-                                "(second press pulsetime=%d >= %d, hold=%.3f s)",
-                                p2_pulsetime,
-                                _LONG_PRESS_PULSETIME,
-                                p2_hold,
-                            )
-                            self._on_event("long_press")
-                        else:
-                            _LOGGER.info("Button event: double_press")
-                            self._on_event("double_press")
-
-                        second_press_handled = True
-                        break
-
-                    time.sleep(_POLL_INTERVAL)
-
-                if not second_press_handled and not self._stop_event.is_set():
+                if second_press_event is not None:
+                    _LOGGER.info("Button event: %s", second_press_event)
+                    self._on_event(second_press_event)
+                elif not self._stop_event.is_set():
                     _LOGGER.info(
                         "Button event: single_press (pulsetime=%d, hold=%.3f s)",
                         pulsetime,
