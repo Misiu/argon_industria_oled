@@ -32,7 +32,7 @@ class ArgonOledImageEntity(ImageEntity):
     """Expose the current OLED framebuffer as a preview image.
 
     The entity refreshes automatically whenever the display content changes
-    (draw, clear, or startup splash).  The image is returned as a 4x scaled
+    (draw, clear, or startup splash).  The image is returned as a 2x scaled
     PNG so it remains legible in the Home Assistant UI.
     """
 
