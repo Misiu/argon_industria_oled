@@ -109,11 +109,11 @@ class TestGetFramebufferPngBytesBlack(unittest.TestCase):
         loaded = Image.open(io.BytesIO(result))  # type: ignore[arg-type]
         self.assertEqual(loaded.format, "PNG")
 
-    def test_output_is_4x_scaled(self) -> None:
-        """The PNG image is 4x the original display dimensions."""
+    def test_output_is_2x_scaled(self) -> None:
+        """The PNG image is 2x the original display dimensions."""
         result = self.dev.get_framebuffer_png_bytes()
         loaded = Image.open(io.BytesIO(result))  # type: ignore[arg-type]
-        self.assertEqual(loaded.size, (DISPLAY_WIDTH * 4, DISPLAY_HEIGHT * 4))
+        self.assertEqual(loaded.size, (DISPLAY_WIDTH * 2, DISPLAY_HEIGHT * 2))
 
     def test_all_pixels_black(self) -> None:
         """A fully-black framebuffer produces an all-black PNG."""

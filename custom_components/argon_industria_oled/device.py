@@ -17,12 +17,13 @@ except ImportError as err:  # pragma: no cover - runtime import guard
     raise RuntimeError("smbus2 must be installed to use this integration") from err
 
 try:  # pragma: no cover - runtime import guard
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageChops, ImageDraw, ImageFont
 except ImportError as err:  # pragma: no cover - runtime import guard
     raise RuntimeError("Pillow must be installed to use this integration") from err
 
 from .const import (
     COLOR_BLACK,
+    COLOR_WHITE,
     DEFAULT_I2C_ADDRESS,
     DEFAULT_I2C_BUS,
     DISPLAY_HEIGHT,
@@ -32,6 +33,7 @@ from .const import (
     ELEMENT_LINE,
     ELEMENT_MULTILINE,
     ELEMENT_PIXEL,
+    ELEMENT_PROGRESS_BAR,
     ELEMENT_RECTANGLE,
     ELEMENT_TEXT,
     RETRY_ATTEMPTS,
@@ -212,7 +214,7 @@ class ArgonOledDevice:
 
         self._retry(operation, context="draw")
 
-    def _draw_element(  # pylint: disable=too-many-locals
+    def _draw_element(  # pylint: disable=too-many-locals,too-many-return-statements
         self, drawer: ImageDraw.ImageDraw, canvas: Image.Image, element: dict[str, Any]
     ) -> None:
         """Draw one element onto the in-memory framebuffer."""
@@ -275,6 +277,10 @@ class ArgonOledDevice:
             self._draw_image(canvas, element)
             return
 
+        if element_type == ELEMENT_PROGRESS_BAR:
+            self._draw_progress_bar(drawer, canvas, element)
+            return
+
     def _draw_image(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Render a source image onto the framebuffer with clipping."""
         source = element.get("url")
@@ -295,6 +301,83 @@ class ArgonOledDevice:
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
             canvas.paste(image, (x, y))
+
+    def _draw_progress_bar(  # pylint: disable=too-many-locals
+        self, drawer: ImageDraw.ImageDraw, canvas: Image.Image, element: dict[str, Any]
+    ) -> None:
+        """Draw a progress bar element onto the framebuffer.
+
+        Renders in four ordered layers — background fill, progress fill, outline
+        border, and an optional percentage label — then optionally centers a
+        ``"<N>%"`` text label inside the bar.
+
+        The percentage label is composited with XOR so each glyph pixel inverts the
+        underlying bar pixel: the label appears **black** over the filled (bright)
+        region and **white** over the empty (dark) region, making it always legible
+        at any progress value without any extra configuration.
+
+        Supported properties (all optional except the bounding box coordinates):
+
+        * ``x_start``, ``y_start``, ``x_end``, ``y_end`` — bounding box (clamped).
+        * ``progress`` — 0-100 float/int; values outside the range are clamped.
+        * ``direction`` — fill direction: ``"right"`` (default), ``"left"``,
+          ``"up"``, or ``"down"``.
+        * ``background`` — background color (default ``"black"``).
+        * ``fill`` — progress fill color (default ``"white"``).
+        * ``outline`` — border color (default ``"white"``).
+        * ``width`` — border thickness in pixels (default ``1``).
+        * ``show_percentage`` — when truthy, draws a centered ``"<N>%"`` label
+          using XOR compositing. ``size`` controls the font size (default ``8``).
+        """
+        x1 = self._clamp_x(element.get("x_start", 0))
+        y1 = self._clamp_y(element.get("y_start", 0))
+        x2 = self._clamp_x(element.get("x_end", x1))
+        y2 = self._clamp_y(element.get("y_end", y1))
+        progress = max(0.0, min(100.0, float(element.get("progress", 0))))
+        direction = str(element.get("direction", "right")).lower()
+        if direction not in {"right", "left", "up", "down"}:
+            raise DeviceError(f"Invalid progress_bar direction: {direction!r}")
+
+        bg_color = self._color_from_key(element, "background", COLOR_BLACK)
+        fill_color = self._color_from_key(element, "fill", COLOR_WHITE)
+        outline_color = self._color_from_key(element, "outline", COLOR_WHITE)
+        border_width = max(1, int(element.get("width", 1)))
+
+        # 1. Background
+        drawer.rectangle((x1, y1, x2, y2), fill=bg_color)
+
+        # 2. Progress fill
+        if progress > 0.0:
+            bar_w = x2 - x1
+            bar_h = y2 - y1
+            filled_w = int(bar_w * progress / 100.0)
+            filled_h = int(bar_h * progress / 100.0)
+            if direction == "right":
+                drawer.rectangle((x1, y1, x1 + filled_w, y2), fill=fill_color)
+            elif direction == "left":
+                drawer.rectangle((x2 - filled_w, y1, x2, y2), fill=fill_color)
+            elif direction == "down":
+                drawer.rectangle((x1, y1, x2, y1 + filled_h), fill=fill_color)
+            else:  # up
+                drawer.rectangle((x1, y2 - filled_h, x2, y2), fill=fill_color)
+
+        # 3. Outline border
+        drawer.rectangle((x1, y1, x2, y2), outline=outline_color, width=border_width)
+
+        # 4. Optional percentage text — XOR composited so the label always contrasts
+        #    with its background: black glyphs over the filled region, white glyphs
+        #    over the unfilled region, rendered pixel by pixel automatically.
+        if bool(element.get("show_percentage", False)):
+            font = self._load_font(element.get("size", 8))
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
+            # Render text onto a blank mask layer (white glyphs on black).
+            text_layer = Image.new("1", canvas.size, color=0)
+            ImageDraw.Draw(text_layer).text(
+                (cx, cy), f"{int(progress)}%", font=font, fill=1, anchor="mm"
+            )
+            # XOR: canvas pixels under each glyph pixel are inverted in place.
+            canvas.paste(ImageChops.logical_xor(canvas, text_layer))
 
     def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Load a readable default font with optional size hint.
@@ -390,14 +473,14 @@ class ArgonOledDevice:
     def get_framebuffer_png_bytes(self) -> bytes | None:
         """Return the current framebuffer as a scaled-up PNG, or None if not initialized.
 
-        The 1-bit monochrome framebuffer is converted to grayscale and scaled 4x
+        The 1-bit monochrome framebuffer is converted to grayscale and scaled 2x
         with nearest-neighbour resampling so the preview remains crisp and legible
         in the Home Assistant UI.
         """
         if self._state is None:
             return None
         image = self._state.framebuffer.convert("L").resize(
-            (DISPLAY_WIDTH * 4, DISPLAY_HEIGHT * 4),
+            (DISPLAY_WIDTH * 2, DISPLAY_HEIGHT * 2),
             resample=Image.Resampling.NEAREST,
         )
         buf = io.BytesIO()
@@ -456,7 +539,16 @@ class ArgonOledDevice:
         Accepts ``"black"`` for pixel-off (0) or any other value (including the
         default ``"white"``) for pixel-on (1).
         """
-        return 0 if str(element.get("color", "white")).lower() == COLOR_BLACK else 1
+        return ArgonOledDevice._color_from_key(element, "color")
+
+    @staticmethod
+    def _color_from_key(element: dict[str, Any], key: str, default: str = COLOR_WHITE) -> int:
+        """Return the Pillow fill value (0 = black, 1 = white) for a named color key.
+
+        Accepts ``"black"`` for pixel-off (0) or any other value for pixel-on (1).
+        ``default`` is used when *key* is absent from *element*.
+        """
+        return 0 if str(element.get(key, default)).lower() == COLOR_BLACK else 1
 
     @staticmethod
     def _clamp_x(value: Any) -> int:

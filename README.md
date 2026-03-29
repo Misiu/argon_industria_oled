@@ -87,6 +87,9 @@ data:
 ## Supported Draw Types
 
 ### 1) text
+
+![text element](tests/images/type_text.png)
+
 Required:
 - `type: text`
 - `value`
@@ -105,6 +108,9 @@ Optional:
 ```
 
 ### 2) multiline
+
+![multiline text element](tests/images/type_multiline.png)
+
 Required:
 - `type: multiline`
 - `value`
@@ -129,6 +135,9 @@ Optional:
 ```
 
 ### 3) line
+
+![line element](tests/images/type_line.png)
+
 Required:
 - `type: line`
 - `x_start`
@@ -149,6 +158,9 @@ Optional:
 ```
 
 ### 4) rectangle
+
+![rectangle element](tests/images/type_rectangle.png)
+
 Required:
 - `type: rectangle`
 - `x_start`, `y_start`, `x_end`, `y_end`
@@ -166,6 +178,9 @@ Optional:
 ```
 
 ### 5) filled_rectangle
+
+![filled_rectangle element](tests/images/type_filled_rectangle.png)
+
 Required:
 - `type: filled_rectangle`
 - `x_start`, `y_start`, `x_end`, `y_end`
@@ -183,6 +198,9 @@ Optional:
 ```
 
 ### 6) dlimg
+
+![dlimg element](tests/images/type_dlimg.png)
+
 Required:
 - `type: dlimg`
 - `url` (currently local file path)
@@ -201,6 +219,9 @@ Optional:
 ```
 
 ### 7) pixel
+
+![pixel element](tests/images/type_pixel.png)
+
 Required:
 - `type: pixel`
 - `x`, `y`
@@ -209,6 +230,53 @@ Required:
 - type: pixel
   x: 5
   y: 5
+```
+
+### 8) progress_bar
+
+Draws a filled progress bar with an optional centred percentage label.
+The label is composited with XOR so it is always legible — black text over the
+filled region, white text over the empty region — at any progress value.
+
+**Progress levels** (direction: right)
+
+![progress bar at 0, 25, 50, 75, and 100 percent](tests/images/progress_bar_progress.png)
+
+**Fill directions** at 60 %
+
+![progress bar in all four fill directions](tests/images/progress_bar_directions.png)
+
+**Percentage text** (`show_percentage: true`, XOR composited)
+
+![progress bar with centred percentage label at 50 and 75 percent](tests/images/progress_bar_percentage.png)
+
+**Visual styles** — standard / thick border / inverted colours
+
+![standard, thick-border, and inverted-colour progress bars](tests/images/progress_bar_styles.png)
+
+Required:
+- `type: progress_bar`
+- `x_start`, `y_start`, `x_end`, `y_end`
+- `progress` (0–100, clamped)
+
+Optional:
+- `direction` (`right` / `left` / `up` / `down`, default: `right`)
+- `background` color of the unfilled region (default: `black`)
+- `fill` color of the filled region (default: `white`)
+- `outline` border color (default: `white`)
+- `width` border thickness in pixels (default: `1`)
+- `show_percentage` draw a centred `N%` label (default: `false`)
+- `size` font size for the percentage label (default: `8`)
+
+```yaml
+- type: progress_bar
+  x_start: 4
+  y_start: 50
+  x_end: 123
+  y_end: 62
+  progress: 72
+  direction: right
+  show_percentage: true
 ```
 
 ## Other Services
