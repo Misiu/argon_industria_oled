@@ -279,6 +279,41 @@ Optional:
   show_percentage: true
 ```
 
+### 9) icon
+
+Draws a [Material Design Icon](https://pictogrammers.com/library/mdi/) from
+the bundled `materialdesignicons.ttf` font (MDI v7.4.47, 7 447 icons).
+
+![home and thermometer MDI icons](tests/images/type_icon.png)
+
+The icon is guaranteed to fit exactly inside the declared square.
+`x=10, y=20, size=30` places the icon in the pixel region `(10, 20) → (39, 49)` —
+nothing outside that square is touched.
+
+Required:
+- `type: icon`
+- `value` — icon name, with or without the `mdi:` prefix (e.g. `"mdi:home"` or `"home"`)
+- `x`, `y` — top-left corner of the icon square
+- `size` — side length of the square in pixels
+
+Optional:
+- `fill` — icon color (default: `white`)
+
+```yaml
+- type: icon
+  value: "mdi:home"
+  x: 4
+  y: 4
+  size: 24
+  fill: white
+
+- type: icon
+  value: "thermometer"
+  x: 68
+  y: 4
+  size: 20
+```
+
 ## Other Services
 - `argon_industria_oled.clear`: clears display.
 - `argon_industria_oled.show_logo`: redraws startup splash/logo.
