@@ -349,7 +349,7 @@ class ArgonOledDevice:
             return
 
         if element_type == ELEMENT_ICON:
-            self._draw_icon(drawer, element)
+            self._draw_icon(canvas, element)
             return
 
     def _draw_image(self, canvas: Image.Image, element: dict[str, Any]) -> None:
@@ -450,24 +450,33 @@ class ArgonOledDevice:
             # XOR: canvas pixels under each glyph pixel are inverted in place.
             canvas.paste(ImageChops.logical_xor(canvas, text_layer))
 
-    def _draw_icon(self, drawer: ImageDraw.ImageDraw, element: dict[str, Any]) -> None:
+    def _draw_icon(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Draw a Material Design Icon onto the framebuffer.
+
+        The icon is guaranteed to occupy exactly the ``size x size`` pixel square
+        whose top-left corner is at ``(x, y)``.  For example ``x=10``, ``y=20``,
+        ``size=30`` places the icon inside ``(10, 20) -> (40, 50)``.
+
+        MDI SVG viewports are square (24x24 units), but the TTF encoding is NOT:
+        the horizontal advance equals ``size`` but the vertical range is only
+        ~75-90% of ``size`` due to cap-height / UPM scaling.  ``font.getbbox()``
+        is used to read the exact ink extents (including the rare +-1 pixel overruns
+        found in ~1% of icons), allocate a minimal exact-sized scratch image, and
+        render the glyph with a precise offset.  The result is then resized to
+        ``size x size`` with Lanczos resampling and pasted at ``(x, y)``.
 
         Looks up the icon codepoint from the bundled
         ``materialdesignicons.meta.json`` file and renders the corresponding
         glyph from ``materialdesignicons.ttf``.
 
-        Follows the same approach as the OpenDisplay integration:
-
         * ``value`` — icon name, optionally prefixed with ``mdi:``
           (e.g. ``"mdi:home"`` or ``"home"``).  Required.
-        * ``x``, ``y`` — position of the icon glyph (clamped).  Default ``0, 0``.
-        * ``size`` — icon size in pixels (default ``24``).
+        * ``x``, ``y`` — top-left corner of the icon square (clamped).  Default ``0, 0``.
+        * ``size`` — side length of the icon square in pixels (default ``24``).
         * ``fill`` — icon color; ``"black"`` or ``"white"`` (default ``"white"``).
 
-        Raises ``DeviceError`` when the icon name is not found in the metadata,
-        mirroring the OpenDisplay error-on-unknown-name behaviour for single
-        icons (as opposed to icon sequences which silently skip unknowns).
+        Raises ``DeviceError`` when the icon name is not found in the metadata.
+        Returns silently when the glyph has no visible ink (blank codepoint).
 
         The MDI font is cached by size so the 1.3 MB TTF is only parsed once
         per unique size, regardless of how many icons are rendered.
@@ -486,9 +495,35 @@ class ArgonOledDevice:
         y = self._clamp_y(element.get("y", 0))
         fill = self._color_from_key(element, "fill", COLOR_WHITE)
         font = _load_mdi_font(size)
+        glyph_char = chr(int(codepoint, 16))
 
-        # anchor="la" matches OpenDisplay: left edge at x, ascender line at y.
-        drawer.text((x, y), chr(int(codepoint, 16)), font=font, fill=fill)
+        # Ask Pillow for the exact ink extents of this glyph.
+        # MDI glyphs are square in SVG but the TTF conversion is NOT square:
+        # the horizontal advance equals `size`, but the vertical range is only
+        # ~75-90% of `size` (cap-height / UPM ratio).  A small minority of icons
+        # also have left < 0 or right > size (+-1 pixel overrun).
+        # Using getbbox() lets us allocate the minimum exact scratch and avoids
+        # the costly 4x oversized scratch + getbbox crop used in a naive approach.
+        bb_left, bb_top, bb_right, bb_bottom = font.getbbox(glyph_char)
+        glyph_w = bb_right - bb_left
+        glyph_h = bb_bottom - bb_top
+        if glyph_w <= 0 or glyph_h <= 0:
+            return  # blank/invisible glyph — nothing to draw
+
+        # Render into an exact (glyph_w x glyph_h) grayscale scratch, offsetting
+        # by (-bb_left, -bb_top) so the ink starts at (0, 0) regardless of font-metric margins.
+        scratch = Image.new("L", (glyph_w, glyph_h), color=0)
+        ImageDraw.Draw(scratch).text((-bb_left, -bb_top), glyph_char, font=font, fill=255)
+
+        # Resize to exactly size x size (squeezes the non-square glyph into the
+        # declared square) and threshold back to 1-bit.
+        glyph_img: Image.Image = scratch.resize(
+            (size, size), resample=Image.Resampling.LANCZOS
+        ).point(lambda p: 1 if p > 127 else 0, "1")
+
+        # Paste fill color onto the canvas wherever the glyph has ink.
+        fill_img = Image.new("1", (size, size), color=fill)
+        canvas.paste(fill_img, (x, y), mask=glyph_img)
 
     def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Load a readable default font with optional size hint.

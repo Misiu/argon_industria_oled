@@ -472,19 +472,38 @@ def test_image_progress_bar_styles() -> None:
 
 
 def test_image_type_icon() -> None:
-    """Render two MDI icons and save type_icon.png.
+    """Render two MDI icons and verify the exact bounding-box contract.
 
-    Draws a ``mdi:home`` icon (24 px) at the top-left and a ``mdi:thermometer``
-    icon (32 px) to the right of it.  Both accept the ``mdi:`` prefix as well
-    as the bare icon name, so we test one of each form.
+    The contract: ``x=X, y=Y, size=S`` → icon pixels are confined to the
+    square ``(X, Y) → (X+S-1, Y+S-1)``.  Nothing outside that square may
+    be touched.
+
+    Draws a ``mdi:home`` icon (24 px) at (4, 4) → occupies (4,4)→(27,27)
+    and a ``mdi:thermometer`` icon (20 px) at (68, 4) → occupies (68,4)→(87,23).
+    Both accept the ``mdi:`` prefix as well as the bare icon name.
     """
+    ix, iy, isz = 4, 4, 24  # home: top-left corner + size
+    tx, ty, tsz = 68, 4, 20  # thermometer: top-left corner + size
+
     img = _render(
-        # mdi: prefix form — home icon, 24 px
-        {"type": "icon", "value": "mdi:home", "x": 4, "y": 4, "size": 24},
-        # bare name form — thermometer icon, 32 px
-        {"type": "icon", "value": "thermometer", "x": 68, "y": 0, "size": 32},
+        {"type": "icon", "value": "mdi:home", "x": ix, "y": iy, "size": isz},
+        {"type": "icon", "value": "thermometer", "x": tx, "y": ty, "size": tsz},
     )
     _save(img, "type_icon")
-    # Both icons must produce at least one white pixel in their bounding boxes.
-    assert region_has_white(img, 4, 4, 30, 30)  # home (24 px)
-    assert region_has_white(img, 68, 0, 102, 34)  # thermometer (32 px)
+
+    # ── bounding-box contract ────────────────────────────────────────────────
+    # 1. Each icon region must contain at least one white (ink) pixel.
+    assert region_has_white(img, ix, iy, ix + isz - 1, iy + isz - 1)
+    assert region_has_white(img, tx, ty, tx + tsz - 1, ty + tsz - 1)
+
+    # 2. Nothing outside the declared squares may have been touched.
+    #    Check the four cardinal strips around each icon.
+
+    # home icon — strips above, below, left of, and right of the square
+    if iy > 0:
+        assert region_is_black(img, ix, 0, ix + isz - 1, iy - 1)  # above
+    assert region_is_black(img, ix, iy + isz, ix + isz - 1, _H - 1)  # below
+    if ix > 0:
+        assert region_is_black(img, 0, iy, ix - 1, iy + isz - 1)  # left
+    # gap between the two icons must be untouched
+    assert region_is_black(img, ix + isz, iy, tx - 1, iy + isz - 1)
