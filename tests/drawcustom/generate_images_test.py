@@ -749,3 +749,107 @@ def test_image_type_pieslice_filled() -> None:
     _save(img, "type_pieslice_filled")
     assert region_has_white(img, 10, 10, 55, 55)  # inside pac-man
     assert region_has_white(img, 70, 10, 118, 54)  # inside full pie
+
+
+# ---------------------------------------------------------------------------
+# type: rectangle with radius
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_rectangle_radius() -> None:
+    """Render rounded rectangles (outline and filled) and save type_rectangle_radius.png."""
+    img = _render(
+        # Outer rounded frame (large radius)
+        {
+            "type": "rectangle",
+            "x_start": 2,
+            "y_start": 2,
+            "x_end": 125,
+            "y_end": 61,
+            "radius": 8,
+        },
+        # Inner filled rounded rectangle (small radius)
+        {
+            "type": "rectangle",
+            "x_start": 20,
+            "y_start": 14,
+            "x_end": 107,
+            "y_end": 49,
+            "radius": 4,
+            "fill": True,
+        },
+    )
+    _save(img, "type_rectangle_radius")
+    # Outer outline midpoints must be white
+    assert region_has_white(img, 40, 2, 80, 2)  # top edge
+    assert region_has_white(img, 40, 61, 80, 61)  # bottom edge
+    # Corners of the outer rect are rounded away — pixels at exact corners are black
+    assert region_is_black(img, 2, 2, 2, 2)
+    assert region_is_black(img, 125, 2, 125, 2)
+    # Inner filled region must be white
+    assert region_has_white(img, 30, 24, 97, 39)
+
+
+# ---------------------------------------------------------------------------
+# demo: README header image
+# ---------------------------------------------------------------------------
+
+
+def test_image_demo_header() -> None:
+    """Render the README header demo and save demo_header.png.
+
+    Layout (128x64):
+      - White filled rounded rectangle occupying the top ~40 px
+      - MDI home icon (black, 28 px) centred on the white square
+      - "Argon Industria" text (size 9) just above the progress bar
+      - Full-width progress bar at the bottom (last 10 px)
+    """
+    img = _render(
+        # White filled rounded square — top section
+        {
+            "type": "rectangle",
+            "x_start": 0,
+            "y_start": 0,
+            "x_end": 127,
+            "y_end": 42,
+            "fill": True,
+            "radius": 0,
+            "color": "white",
+        },
+        # Black home icon centred in the white area
+        {
+            "type": "icon",
+            "value": "mdi:home",
+            "x": 50,
+            "y": 7,
+            "size": 28,
+            "fill": "black",
+        },
+        # "Argon Industria" label just above the progress bar
+        {
+            "type": "text",
+            "value": "Argon Industria",
+            "x": "50%",
+            "y": 44,
+            "size": 9,
+            "anchor": "mt",
+            "color": "white",
+        },
+        # Progress bar at the bottom
+        {
+            "type": "progress_bar",
+            "x_start": 2,
+            "y_start": 55,
+            "x_end": 125,
+            "y_end": 63,
+            "progress": 72,
+            "direction": "right",
+        },
+    )
+    _save(img, "demo_header")
+    # White square must be white
+    assert region_has_white(img, 1, 1, 126, 41)
+    # Text area must contain white pixels (label)
+    assert region_has_white(img, 20, 44, 108, 54)
+    # Progress bar must have white pixels (filled portion)
+    assert region_has_white(img, 4, 56, 60, 62)

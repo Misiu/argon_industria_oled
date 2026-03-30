@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from tests.drawcustom.helpers import (
     ArgonOledDevice,
@@ -138,3 +138,86 @@ def test_rectangle_width_thickens_outline(
     )
     # width=3 must light up pixels inside the border that width=1 left dark
     assert region_has_white(image3, 11, 11, 12, 12)
+
+
+def test_rectangle_radius_rounds_corners(
+    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
+) -> None:
+    """radius > 0 draws a rounded rectangle; corners are not filled."""
+    image, draw = black_canvas
+    draw_element(
+        device,
+        image,
+        draw,
+        {
+            "type": "rectangle",
+            "x_start": 10,
+            "y_start": 10,
+            "x_end": 60,
+            "y_end": 50,
+            "radius": 6,
+        },
+    )
+    # Mid-point of each edge must be white (outline present)
+    assert region_has_white(image, 30, 10, 40, 10)  # top edge midpoint
+    assert region_has_white(image, 30, 50, 40, 50)  # bottom edge midpoint
+    assert region_has_white(image, 10, 28, 10, 32)  # left edge midpoint
+    assert region_has_white(image, 60, 28, 60, 32)  # right edge midpoint
+    # Exact corners (before the arc) should be black (rounded away)
+    assert region_is_black(image, 10, 10, 10, 10)
+    assert region_is_black(image, 60, 10, 60, 10)
+    assert region_is_black(image, 10, 50, 10, 50)
+    assert region_is_black(image, 60, 50, 60, 50)
+
+
+def test_rectangle_radius_with_fill(
+    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
+) -> None:
+    """radius with fill=True fills the rounded rectangle interior."""
+    image, draw = black_canvas
+    draw_element(
+        device,
+        image,
+        draw,
+        {
+            "type": "rectangle",
+            "x_start": 10,
+            "y_start": 10,
+            "x_end": 60,
+            "y_end": 50,
+            "radius": 6,
+            "fill": True,
+        },
+    )
+    # Centre of the rectangle must be white (filled)
+    assert region_has_white(image, 25, 20, 45, 40)
+
+
+def test_rectangle_radius_zero_is_sharp(
+    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
+) -> None:
+    """radius=0 (default) produces sharp corners identical to omitting radius."""
+    image_no_radius, draw_no_radius = black_canvas
+    draw_element(
+        device,
+        image_no_radius,
+        draw_no_radius,
+        {"type": "rectangle", "x_start": 10, "y_start": 10, "x_end": 60, "y_end": 50},
+    )
+    image_zero = Image.new("1", (128, 64), color=0)
+    draw_zero = ImageDraw.Draw(image_zero)
+    draw_element(
+        device,
+        image_zero,
+        draw_zero,
+        {
+            "type": "rectangle",
+            "x_start": 10,
+            "y_start": 10,
+            "x_end": 60,
+            "y_end": 50,
+            "radius": 0,
+        },
+    )
+    diff = ImageChops.difference(image_no_radius, image_zero)
+    assert diff.getbbox() is None, "radius=0 should produce identical output to no-radius"

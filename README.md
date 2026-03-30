@@ -1,5 +1,7 @@
 # Argon Industria OLED Home Assistant Integration
 
+![Argon Industria OLED demo](tests/images/demo_header.png)
+
 Custom Home Assistant integration for the Argon ONE V5 Industria OLED module (SSD1306, 128x64, I2C address `0x3C`).
 
 ## Overview
@@ -203,10 +205,10 @@ Draws a straight line between two points.
 
 ### rectangle
 
-Draws a rectangle outline; optionally fills the interior.
+Draws a rectangle outline; optionally fills the interior with rounded corners.
 Use `fill: true` instead of the old `filled_rectangle` type.
 
-![rectangle element](tests/images/type_rectangle.png) ![filled rectangle variant](tests/images/type_rectangle_filled.png)
+![rectangle element](tests/images/type_rectangle.png) ![filled rectangle variant](tests/images/type_rectangle_filled.png) ![rounded rectangle](tests/images/type_rectangle_radius.png)
 
 | Parameter | Description                    | Required | Default | Notes                            |
 |-----------|--------------------------------|----------|---------|----------------------------------|
@@ -216,6 +218,7 @@ Use `fill: true` instead of the old `filled_rectangle` type.
 | `y_end`   | Bottom edge Y position         | Yes      | —       | Pixels or `"N%"`                 |
 | `fill`    | Fill the interior with color   | No       | `false` | `true` / `false`                 |
 | `width`   | Outline thickness              | No       | `1`     | Pixels; minimum `1`              |
+| `radius`  | Corner radius                  | No       | `0`     | Pixels; `0` = sharp corners      |
 
 ```yaml
 - type: rectangle
@@ -225,6 +228,7 @@ Use `fill: true` instead of the old `filled_rectangle` type.
   y_end: 40
   fill: true
   width: 2
+  radius: 6
 ```
 
 ---

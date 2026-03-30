@@ -408,7 +408,13 @@ class ArgonOledDevice:
             y2 = self._clamp_y(element.get("y_end", y1))
             fill: int | None = color if bool(element.get("fill", False)) else None
             width = max(1, int(element.get("width", 1)))
-            drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill, width=width)
+            radius = max(0, int(element.get("radius", 0)))
+            if radius > 0:
+                drawer.rounded_rectangle(
+                    (x1, y1, x2, y2), radius=radius, outline=color, fill=fill, width=width
+                )
+            else:
+                drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill, width=width)
             return
 
         if element_type == ELEMENT_POLYGON:
