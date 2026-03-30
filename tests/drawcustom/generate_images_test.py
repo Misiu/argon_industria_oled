@@ -464,3 +464,27 @@ def test_image_progress_bar_styles() -> None:
     # Inverted bar: unfilled zone interior must be WHITE (white background).
     # Unfilled zone x=77..123
     assert region_has_white(img, 80, 46, 121, 54)
+
+
+# ---------------------------------------------------------------------------
+# type: icon
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_icon() -> None:
+    """Render two MDI icons and save type_icon.png.
+
+    Draws a ``mdi:home`` icon (24 px) at the top-left and a ``mdi:thermometer``
+    icon (32 px) to the right of it.  Both accept the ``mdi:`` prefix as well
+    as the bare icon name, so we test one of each form.
+    """
+    img = _render(
+        # mdi: prefix form — home icon, 24 px
+        {"type": "icon", "value": "mdi:home", "x": 4, "y": 4, "size": 24},
+        # bare name form — thermometer icon, 32 px
+        {"type": "icon", "value": "thermometer", "x": 68, "y": 0, "size": 32},
+    )
+    _save(img, "type_icon")
+    # Both icons must produce at least one white pixel in their bounding boxes.
+    assert region_has_white(img, 4, 4, 30, 30)  # home (24 px)
+    assert region_has_white(img, 68, 0, 102, 34)  # thermometer (32 px)

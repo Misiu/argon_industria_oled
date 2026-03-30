@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -30,6 +31,7 @@ from .const import (
     DISPLAY_WIDTH,
     ELEMENT_DLIMG,
     ELEMENT_FILLED_RECTANGLE,
+    ELEMENT_ICON,
     ELEMENT_LINE,
     ELEMENT_MULTILINE,
     ELEMENT_PIXEL,
@@ -52,6 +54,71 @@ _COLUMN_OFFSET = 2
 _PAGE_HEIGHT = 8
 _PAGE_COUNT = DISPLAY_HEIGHT // _PAGE_HEIGHT
 _WRITE_CHUNK = 16
+
+# Material Design Icons assets bundled with the integration.
+_ASSETS_DIR = Path(__file__).parent / "assets"
+_MDI_FONT_PATH = _ASSETS_DIR / "materialdesignicons.ttf"
+_MDI_META_PATH = _ASSETS_DIR / "materialdesignicons.meta.json"
+
+# Module-level caches to avoid re-loading on every icon draw.
+# _mdi_index  : flat name/alias → hex-codepoint mapping built once from meta.json.
+# _mdi_font_cache : size → loaded FreeTypeFont, avoids re-parsing the 1.3 MB TTF.
+_mdi_index: dict[str, str] | None = None
+_mdi_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+
+
+def _lookup_mdi_codepoint(icon_name: str) -> str | None:
+    """Return the hex codepoint string for a Material Design Icon name.
+
+    Searches both primary names and aliases in the bundled
+    ``materialdesignicons.meta.json`` file.
+    The result is cached in a flat ``name -> codepoint`` index after the
+    first call so subsequent lookups are O(1).
+
+    Returns ``None`` when the icon is not found.
+    """
+    global _mdi_index
+
+    if _mdi_index is None:
+        try:
+            with _MDI_META_PATH.open(encoding="utf-8") as fh:
+                entries: list[dict[str, Any]] = json.load(fh)
+        except (OSError, json.JSONDecodeError) as err:
+            _LOGGER.error("Failed to load materialdesignicons.meta.json: %s", err)
+            return None
+
+        index: dict[str, str] = {}
+        for entry in entries:
+            codepoint: str = entry["codepoint"]
+            index[entry["name"]] = codepoint
+            for alias in entry.get("aliases", []):
+                index.setdefault(alias, codepoint)
+        _mdi_index = index
+
+    return _mdi_index.get(icon_name)
+
+
+def _load_mdi_font(size: int) -> ImageFont.FreeTypeFont:
+    """Return the MDI TrueType font at *size*, loading it only once per size.
+
+    Results are kept in ``_mdi_font_cache`` so the 1.3 MB TTF is parsed at
+    most once per unique pixel size across the lifetime of the process.
+
+    Raises ``DeviceError`` when the font file cannot be opened.
+    """
+    cached = _mdi_font_cache.get(size)
+    if cached is not None:
+        return cached
+
+    try:
+        font = ImageFont.truetype(str(_MDI_FONT_PATH), size)
+    except OSError as err:
+        raise DeviceError(f"Could not load MDI font: {err}") from err
+
+    _mdi_font_cache[size] = font
+    return font
+
+
 _INIT_SEQUENCE: tuple[int, ...] = (
     0xAE,
     0xD5,
@@ -281,6 +348,10 @@ class ArgonOledDevice:
             self._draw_progress_bar(drawer, canvas, element)
             return
 
+        if element_type == ELEMENT_ICON:
+            self._draw_icon(drawer, element)
+            return
+
     def _draw_image(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Render a source image onto the framebuffer with clipping."""
         source = element.get("url")
@@ -378,6 +449,46 @@ class ArgonOledDevice:
             )
             # XOR: canvas pixels under each glyph pixel are inverted in place.
             canvas.paste(ImageChops.logical_xor(canvas, text_layer))
+
+    def _draw_icon(self, drawer: ImageDraw.ImageDraw, element: dict[str, Any]) -> None:
+        """Draw a Material Design Icon onto the framebuffer.
+
+        Looks up the icon codepoint from the bundled
+        ``materialdesignicons.meta.json`` file and renders the corresponding
+        glyph from ``materialdesignicons.ttf``.
+
+        Follows the same approach as the OpenDisplay integration:
+
+        * ``value`` — icon name, optionally prefixed with ``mdi:``
+          (e.g. ``"mdi:home"`` or ``"home"``).  Required.
+        * ``x``, ``y`` — position of the icon glyph (clamped).  Default ``0, 0``.
+        * ``size`` — icon size in pixels (default ``24``).
+        * ``fill`` — icon color; ``"black"`` or ``"white"`` (default ``"white"``).
+
+        Raises ``DeviceError`` when the icon name is not found in the metadata,
+        mirroring the OpenDisplay error-on-unknown-name behaviour for single
+        icons (as opposed to icon sequences which silently skip unknowns).
+
+        The MDI font is cached by size so the 1.3 MB TTF is only parsed once
+        per unique size, regardless of how many icons are rendered.
+        """
+        raw_value = str(element.get("value", ""))
+        icon_name = raw_value[4:] if raw_value.startswith("mdi:") else raw_value
+        if not icon_name:
+            raise DeviceError("icon element requires a non-empty 'value'")
+
+        codepoint = _lookup_mdi_codepoint(icon_name)
+        if codepoint is None:
+            raise DeviceError(f"Unknown MDI icon: {icon_name!r}")
+
+        size = max(6, int(element.get("size", 24)))
+        x = self._clamp_x(element.get("x", 0))
+        y = self._clamp_y(element.get("y", 0))
+        fill = self._color_from_key(element, "fill", COLOR_WHITE)
+        font = _load_mdi_font(size)
+
+        # anchor="la" matches OpenDisplay: left edge at x, ascender line at y.
+        drawer.text((x, y), chr(int(codepoint, 16)), font=font, fill=fill)
 
     def _load_font(self, font_size: Any) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Load a readable default font with optional size hint.
