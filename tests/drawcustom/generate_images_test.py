@@ -149,27 +149,6 @@ def test_image_type_rectangle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# type: filled_rectangle
-# ---------------------------------------------------------------------------
-
-
-def test_image_type_filled_rectangle() -> None:
-    """Render a large filled_rectangle and save type_filled_rectangle.png."""
-    img = _render(
-        {
-            "type": "filled_rectangle",
-            "x_start": 10,
-            "y_start": 8,
-            "x_end": 117,
-            "y_end": 55,
-        },
-    )
-    _save(img, "type_filled_rectangle")
-    # Interior of the filled rectangle must be white.
-    assert region_has_white(img, 11, 9, 116, 54)
-
-
-# ---------------------------------------------------------------------------
 # type: pixel
 # ---------------------------------------------------------------------------
 
@@ -507,3 +486,266 @@ def test_image_type_icon() -> None:
         assert region_is_black(img, 0, iy, ix - 1, iy + isz - 1)  # left
     # gap between the two icons must be untouched
     assert region_is_black(img, ix + isz, iy, tx - 1, iy + isz - 1)
+
+
+# ---------------------------------------------------------------------------
+# type: rectangle (filled variant)
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_rectangle_filled() -> None:
+    """Render a filled rectangle with a thick outline and save type_rectangle_filled.png."""
+    img = _render(
+        # Filled rectangle (replaces filled_rectangle type)
+        {
+            "type": "rectangle",
+            "x_start": 10,
+            "y_start": 8,
+            "x_end": 117,
+            "y_end": 55,
+            "fill": True,
+        },
+        # Thick-outline unfilled rectangle on top to show width parameter
+        {
+            "type": "rectangle",
+            "x_start": 20,
+            "y_start": 16,
+            "x_end": 107,
+            "y_end": 47,
+            "fill": False,
+            "color": "black",
+            "width": 3,
+        },
+    )
+    _save(img, "type_rectangle_filled")
+    assert region_has_white(img, 11, 9, 116, 54)
+
+
+# ---------------------------------------------------------------------------
+# type: polygon
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_polygon() -> None:
+    """Render two outline polygons (triangle + diamond) and save type_polygon.png."""
+    img = _render(
+        # Triangle outline
+        {"type": "polygon", "points": [10, 5, 117, 5, 63, 30]},
+        # Diamond outline
+        {"type": "polygon", "points": [63, 34, 90, 50, 63, 62, 36, 50]},
+    )
+    _save(img, "type_polygon")
+    assert region_has_white(img, 10, 5, 117, 5)  # top edge of triangle
+    assert region_has_white(img, 63, 34, 63, 62)  # left spine of diamond
+
+
+def test_image_type_polygon_filled() -> None:
+    """Render a filled triangle and a filled pentagon and save type_polygon_filled.png."""
+    img = _render(
+        # Filled triangle — left half
+        {
+            "type": "polygon",
+            "points": [2, 2, 60, 2, 31, 61],
+            "fill": True,
+        },
+        # Filled pentagon — right half (roughly)
+        {
+            "type": "polygon",
+            "points": [94, 2, 125, 22, 112, 58, 76, 58, 63, 22],
+            "fill": True,
+        },
+    )
+    _save(img, "type_polygon_filled")
+    assert region_has_white(img, 10, 10, 50, 50)  # inside filled triangle
+    assert region_has_white(img, 80, 20, 115, 50)  # inside filled pentagon
+
+
+# ---------------------------------------------------------------------------
+# type: circle
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_circle() -> None:
+    """Render outline circles at different positions and save type_circle.png."""
+    img = _render(
+        {"type": "circle", "x": 32, "y": 32, "radius": 28},
+        {"type": "circle", "x": 96, "y": 32, "radius": 28},
+    )
+    _save(img, "type_circle")
+    assert region_has_white(img, 4, 4, 60, 60)  # left circle
+    assert region_has_white(img, 68, 4, 124, 60)  # right circle
+
+
+def test_image_type_circle_filled() -> None:
+    """Render filled circle and percentage-radius circle; save type_circle_filled.png."""
+    img = _render(
+        {"type": "circle", "x": 32, "y": 32, "radius": 25, "fill": True},
+        # 20% of 64 = ~13 px radius
+        {"type": "circle", "x": 96, "y": 32, "radius": "20%", "fill": True},
+    )
+    _save(img, "type_circle_filled")
+    assert region_has_white(img, 12, 12, 52, 52)  # inside left filled circle
+    assert region_has_white(img, 85, 22, 107, 44)  # inside right filled circle
+
+
+# ---------------------------------------------------------------------------
+# type: ellipse
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_ellipse() -> None:
+    """Render two outline ellipses and save type_ellipse.png."""
+    img = _render(
+        # Wide flat ellipse
+        {"type": "ellipse", "x_start": 4, "y_start": 4, "x_end": 123, "y_end": 28},
+        # Tall narrow ellipse
+        {"type": "ellipse", "x_start": 44, "y_start": 32, "x_end": 83, "y_end": 62},
+    )
+    _save(img, "type_ellipse")
+    assert region_has_white(img, 4, 15, 123, 17)  # midpoint of wide ellipse
+    assert region_has_white(img, 44, 46, 83, 48)  # midpoint of narrow ellipse
+
+
+def test_image_type_ellipse_filled() -> None:
+    """Render a filled ellipse and a percentage-bbox ellipse; save type_ellipse_filled.png."""
+    img = _render(
+        {"type": "ellipse", "x_start": 4, "y_start": 4, "x_end": 60, "y_end": 60, "fill": True},
+        {
+            "type": "ellipse",
+            "x_start": "50%",
+            "y_start": "10%",
+            "x_end": "95%",
+            "y_end": "90%",
+            "fill": True,
+        },
+    )
+    _save(img, "type_ellipse_filled")
+    assert region_has_white(img, 10, 10, 55, 55)  # inside left filled ellipse
+    assert region_has_white(img, 70, 10, 118, 54)  # inside right filled ellipse
+
+
+# ---------------------------------------------------------------------------
+# type: arc
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_arc() -> None:
+    """Render two arcs (semicircle top + bottom) and save type_arc.png."""
+    img = _render(
+        # Top semicircle
+        {
+            "type": "arc",
+            "x_start": 4,
+            "y_start": 4,
+            "x_end": 123,
+            "y_end": 58,
+            "start": 180,
+            "end": 360,
+        },
+        # Bottom semicircle
+        {
+            "type": "arc",
+            "x_start": 4,
+            "y_start": 4,
+            "x_end": 123,
+            "y_end": 58,
+            "start": 0,
+            "end": 180,
+        },
+    )
+    _save(img, "type_arc")
+    assert region_has_white(img, 4, 4, 123, 58)
+
+
+def test_image_type_arc_angles() -> None:
+    """Render arcs with percentage angles and thick width; save type_arc_angles.png."""
+    img = _render(
+        # 0% .. 25% = 0° .. 90° (right quarter), width=3
+        {
+            "type": "arc",
+            "x_start": 14,
+            "y_start": 4,
+            "x_end": 63,
+            "y_end": 58,
+            "start": "0%",
+            "end": "25%",
+            "width": 3,
+        },
+        # 25% .. 75% = 90° .. 270° (right→left semicircle), width=2
+        {
+            "type": "arc",
+            "x_start": 65,
+            "y_start": 4,
+            "x_end": 113,
+            "y_end": 58,
+            "start": "25%",
+            "end": "75%",
+            "width": 2,
+        },
+    )
+    _save(img, "type_arc_angles")
+    assert region_has_white(img, 14, 4, 113, 58)
+
+
+# ---------------------------------------------------------------------------
+# type: pieslice
+# ---------------------------------------------------------------------------
+
+
+def test_image_type_pieslice() -> None:
+    """Render two outline pie slices and save type_pieslice.png."""
+    img = _render(
+        # Left half: quarter pie (top-right)
+        {
+            "type": "pieslice",
+            "x_start": 4,
+            "y_start": 4,
+            "x_end": 60,
+            "y_end": 60,
+            "start": 270,
+            "end": 360,
+        },
+        # Right half: three-quarter pie
+        {
+            "type": "pieslice",
+            "x_start": 66,
+            "y_start": 4,
+            "x_end": 123,
+            "y_end": 60,
+            "start": 0,
+            "end": 270,
+        },
+    )
+    _save(img, "type_pieslice")
+    assert region_has_white(img, 4, 4, 123, 60)
+
+
+def test_image_type_pieslice_filled() -> None:
+    """Render filled pie slices (pac-man style); save type_pieslice_filled.png."""
+    img = _render(
+        # Filled left half: pac-man (mouth open right)
+        {
+            "type": "pieslice",
+            "x_start": 4,
+            "y_start": 4,
+            "x_end": 60,
+            "y_end": 60,
+            "start": 30,
+            "end": 330,
+            "fill": True,
+        },
+        # Filled right: full pie
+        {
+            "type": "pieslice",
+            "x_start": 66,
+            "y_start": 4,
+            "x_end": 123,
+            "y_end": 60,
+            "start": 0,
+            "end": 360,
+            "fill": True,
+        },
+    )
+    _save(img, "type_pieslice_filled")
+    assert region_has_white(img, 10, 10, 55, 55)  # inside pac-man
+    assert region_has_white(img, 70, 10, 118, 54)  # inside full pie

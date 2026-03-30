@@ -1,4 +1,4 @@
-"""Tests for the ``rectangle`` and ``filled_rectangle`` element types."""
+"""Tests for the ``rectangle`` element type."""
 
 from __future__ import annotations
 
@@ -12,92 +12,6 @@ from tests.drawcustom.helpers import (
     region_has_white,
     region_is_black,
 )
-
-# ---------------------------------------------------------------------------
-# filled_rectangle
-# ---------------------------------------------------------------------------
-
-
-def test_filled_rectangle_white_default(
-    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
-) -> None:
-    """filled_rectangle without explicit color fills with white."""
-    image, draw = black_canvas
-    draw_element(
-        device,
-        image,
-        draw,
-        {"type": "filled_rectangle", "x_start": 10, "y_start": 10, "x_end": 40, "y_end": 30},
-    )
-    assert region_has_white(image, 11, 11, 39, 29)
-
-
-def test_filled_rectangle_white_explicit(
-    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
-) -> None:
-    """filled_rectangle with color=white fills with white."""
-    image, draw = black_canvas
-    draw_element(
-        device,
-        image,
-        draw,
-        {
-            "type": "filled_rectangle",
-            "x_start": 10,
-            "y_start": 10,
-            "x_end": 40,
-            "y_end": 30,
-            "color": "white",
-        },
-    )
-    assert region_has_white(image, 11, 11, 39, 29)
-
-
-def test_filled_rectangle_black_clears_area(
-    white_canvas: tuple[Image.Image, ImageDraw.ImageDraw],
-) -> None:
-    """filled_rectangle with color=black clears the filled area on a white canvas."""
-    before, _ = white_canvas
-    after = before.copy()
-    dev = make_device()
-    draw_element(
-        dev,
-        after,
-        ImageDraw.Draw(after),
-        {
-            "type": "filled_rectangle",
-            "x_start": 10,
-            "y_start": 10,
-            "x_end": 40,
-            "y_end": 30,
-            "color": "black",
-        },
-    )
-    assert region_changed(before, after, 10, 10, 40, 30)
-    assert region_is_black(after, 11, 11, 39, 29)
-
-
-def test_filled_rectangle_no_outline(
-    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
-) -> None:
-    """outline=False does not prevent the fill from being drawn."""
-    image, draw = black_canvas
-    draw_element(
-        device,
-        image,
-        draw,
-        {
-            "type": "filled_rectangle",
-            "x_start": 20,
-            "y_start": 20,
-            "x_end": 60,
-            "y_end": 50,
-            "outline": False,
-            "color": "white",
-        },
-    )
-    assert region_has_white(image, 21, 21, 59, 49)
-
 
 # ---------------------------------------------------------------------------
 # rectangle (outline only)
@@ -161,6 +75,31 @@ def test_rectangle_with_fill(
     assert region_has_white(image, 10, 10, 45, 35)
 
 
+def test_rectangle_fill_black_clears_area(
+    white_canvas: tuple[Image.Image, ImageDraw.ImageDraw],
+) -> None:
+    """rectangle with fill=True and color=black clears the filled area on a white canvas."""
+    before, _ = white_canvas
+    after = before.copy()
+    dev = make_device()
+    draw_element(
+        dev,
+        after,
+        ImageDraw.Draw(after),
+        {
+            "type": "rectangle",
+            "x_start": 10,
+            "y_start": 10,
+            "x_end": 40,
+            "y_end": 30,
+            "fill": True,
+            "color": "black",
+        },
+    )
+    assert region_changed(before, after, 10, 10, 40, 30)
+    assert region_is_black(after, 11, 11, 39, 29)
+
+
 def test_rectangle_no_fill_leaves_interior_unchanged(
     white_canvas: tuple[Image.Image, ImageDraw.ImageDraw],
 ) -> None:
@@ -176,3 +115,26 @@ def test_rectangle_no_fill_leaves_interior_unchanged(
     )
     # Interior should still be white (untouched)
     assert region_has_white(after, 15, 15, 45, 35)
+
+
+def test_rectangle_width_thickens_outline(
+    device: ArgonOledDevice, black_canvas: tuple[Image.Image, ImageDraw.ImageDraw]
+) -> None:
+    """width > 1 draws a thicker outline that covers more pixels."""
+    image1, draw1 = black_canvas
+    draw_element(
+        device,
+        image1,
+        draw1,
+        {"type": "rectangle", "x_start": 10, "y_start": 10, "x_end": 60, "y_end": 50, "width": 1},
+    )
+    image3 = Image.new("1", (128, 64), color=0)
+    draw3 = ImageDraw.Draw(image3)
+    draw_element(
+        device,
+        image3,
+        draw3,
+        {"type": "rectangle", "x_start": 10, "y_start": 10, "x_end": 60, "y_end": 50, "width": 3},
+    )
+    # width=3 must light up pixels inside the border that width=1 left dark
+    assert region_has_white(image3, 11, 11, 12, 12)
