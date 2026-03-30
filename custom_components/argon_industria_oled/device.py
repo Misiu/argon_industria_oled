@@ -9,6 +9,7 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -60,63 +61,80 @@ _ASSETS_DIR = Path(__file__).parent / "assets"
 _MDI_FONT_PATH = _ASSETS_DIR / "materialdesignicons.ttf"
 _MDI_META_PATH = _ASSETS_DIR / "materialdesignicons.meta.json"
 
-# Module-level caches to avoid re-loading on every icon draw.
-# _mdi_index  : flat name/alias → hex-codepoint mapping built once from meta.json.
-# _mdi_font_cache : size → loaded FreeTypeFont, avoids re-parsing the 1.3 MB TTF.
-_mdi_index: dict[str, str] | None = None
-_mdi_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+
+@lru_cache(maxsize=1)
+def _get_mdi_index() -> dict[str, str]:
+    """Build and cache a flat name/alias -> hex-codepoint mapping from meta.json.
+
+    Loaded once on first call; subsequent calls return the cached dict in O(1).
+    Primary icon names always win over aliases (``setdefault`` is used for aliases
+    so a later primary entry cannot overwrite an earlier one's alias mapping).
+    Returns an empty dict and logs an error when the asset file is unreadable.
+    """
+    try:
+        with _MDI_META_PATH.open(encoding="utf-8") as fh:
+            entries: list[dict[str, Any]] = json.load(fh)
+    except (OSError, json.JSONDecodeError) as err:
+        _LOGGER.error("Failed to load materialdesignicons.meta.json: %s", err)
+        return {}
+
+    index: dict[str, str] = {}
+    for entry in entries:
+        codepoint: str = entry["codepoint"]
+        index[entry["name"]] = codepoint
+        for alias in entry.get("aliases", []):
+            index.setdefault(alias, codepoint)
+    return index
 
 
 def _lookup_mdi_codepoint(icon_name: str) -> str | None:
-    """Return the hex codepoint string for a Material Design Icon name.
-
-    Searches both primary names and aliases in the bundled
-    ``materialdesignicons.meta.json`` file.
-    The result is cached in a flat ``name -> codepoint`` index after the
-    first call so subsequent lookups are O(1).
-
-    Returns ``None`` when the icon is not found.
-    """
-    global _mdi_index
-
-    if _mdi_index is None:
-        try:
-            with _MDI_META_PATH.open(encoding="utf-8") as fh:
-                entries: list[dict[str, Any]] = json.load(fh)
-        except (OSError, json.JSONDecodeError) as err:
-            _LOGGER.error("Failed to load materialdesignicons.meta.json: %s", err)
-            return None
-
-        index: dict[str, str] = {}
-        for entry in entries:
-            codepoint: str = entry["codepoint"]
-            index[entry["name"]] = codepoint
-            for alias in entry.get("aliases", []):
-                index.setdefault(alias, codepoint)
-        _mdi_index = index
-
-    return _mdi_index.get(icon_name)
+    """Return the hex codepoint for *icon_name*, or ``None`` if not found."""
+    return _get_mdi_index().get(icon_name)
 
 
+@cache
 def _load_mdi_font(size: int) -> ImageFont.FreeTypeFont:
     """Return the MDI TrueType font at *size*, loading it only once per size.
 
-    Results are kept in ``_mdi_font_cache`` so the 1.3 MB TTF is parsed at
-    most once per unique pixel size across the lifetime of the process.
+    ``lru_cache`` ensures the 1.3 MB TTF is parsed at most once per unique
+    pixel size across the lifetime of the process.
 
     Raises ``DeviceError`` when the font file cannot be opened.
     """
-    cached = _mdi_font_cache.get(size)
-    if cached is not None:
-        return cached
-
     try:
-        font = ImageFont.truetype(str(_MDI_FONT_PATH), size)
+        return ImageFont.truetype(str(_MDI_FONT_PATH), size)
     except OSError as err:
         raise DeviceError(f"Could not load MDI font: {err}") from err
 
-    _mdi_font_cache[size] = font
-    return font
+
+def _render_mdi_glyph(codepoint: str, size: int) -> Image.Image | None:
+    """Render an MDI glyph into a ``size x size`` 1-bit Pillow image.
+
+    Returns ``None`` for blank/invisible glyphs (empty ink bounding box).
+
+    MDI SVG viewports are square (24x24 units) but the TTF encoding is NOT:
+    the horizontal advance equals ``size`` while the vertical range is only
+    ~75-90% of ``size`` (cap-height / UPM ratio).  A small minority of icons
+    also have left < 0 or right > size (+-1 px overrun).  ``font.getbbox()``
+    is used to determine the exact ink extent so the minimal exact-sized
+    scratch image is allocated, avoiding any wasteful oversized scratch.
+    The glyph is rendered with a precise offset so ink starts at (0, 0),
+    then resized to ``size x size`` with Lanczos resampling and thresholded
+    back to 1-bit.
+    """
+    font = _load_mdi_font(size)
+    glyph_char = chr(int(codepoint, 16))
+    bb = font.getbbox(glyph_char)
+    glyph_w = int(bb[2] - bb[0])
+    glyph_h = int(bb[3] - bb[1])
+    if glyph_w <= 0 or glyph_h <= 0:
+        return None
+
+    scratch = Image.new("L", (glyph_w, glyph_h), color=0)
+    ImageDraw.Draw(scratch).text((int(-bb[0]), int(-bb[1])), glyph_char, font=font, fill=255)
+    return scratch.resize((size, size), resample=Image.Resampling.LANCZOS).point(
+        lambda p: 1 if p > 127 else 0, "1"
+    )
 
 
 _INIT_SEQUENCE: tuple[int, ...] = (
@@ -457,17 +475,9 @@ class ArgonOledDevice:
         whose top-left corner is at ``(x, y)``.  For example ``x=10``, ``y=20``,
         ``size=30`` places the icon inside ``(10, 20) -> (40, 50)``.
 
-        MDI SVG viewports are square (24x24 units), but the TTF encoding is NOT:
-        the horizontal advance equals ``size`` but the vertical range is only
-        ~75-90% of ``size`` due to cap-height / UPM scaling.  ``font.getbbox()``
-        is used to read the exact ink extents (including the rare +-1 pixel overruns
-        found in ~1% of icons), allocate a minimal exact-sized scratch image, and
-        render the glyph with a precise offset.  The result is then resized to
-        ``size x size`` with Lanczos resampling and pasted at ``(x, y)``.
-
-        Looks up the icon codepoint from the bundled
-        ``materialdesignicons.meta.json`` file and renders the corresponding
-        glyph from ``materialdesignicons.ttf``.
+        The heavy lifting (glyph metrics, scratch render, resize) is done by
+        ``_render_mdi_glyph()``.  See that function for the full explanation of
+        why the MDI TTF is not square despite the SVG viewport being 24x24.
 
         * ``value`` — icon name, optionally prefixed with ``mdi:``
           (e.g. ``"mdi:home"`` or ``"home"``).  Required.
@@ -477,9 +487,6 @@ class ArgonOledDevice:
 
         Raises ``DeviceError`` when the icon name is not found in the metadata.
         Returns silently when the glyph has no visible ink (blank codepoint).
-
-        The MDI font is cached by size so the 1.3 MB TTF is only parsed once
-        per unique size, regardless of how many icons are rendered.
         """
         raw_value = str(element.get("value", ""))
         icon_name = raw_value[4:] if raw_value.startswith("mdi:") else raw_value
@@ -494,34 +501,11 @@ class ArgonOledDevice:
         x = self._clamp_x(element.get("x", 0))
         y = self._clamp_y(element.get("y", 0))
         fill = self._color_from_key(element, "fill", COLOR_WHITE)
-        font = _load_mdi_font(size)
-        glyph_char = chr(int(codepoint, 16))
 
-        # Ask Pillow for the exact ink extents of this glyph.
-        # MDI glyphs are square in SVG but the TTF conversion is NOT square:
-        # the horizontal advance equals `size`, but the vertical range is only
-        # ~75-90% of `size` (cap-height / UPM ratio).  A small minority of icons
-        # also have left < 0 or right > size (+-1 pixel overrun).
-        # Using getbbox() lets us allocate the minimum exact scratch and avoids
-        # the costly 4x oversized scratch + getbbox crop used in a naive approach.
-        bb_left, bb_top, bb_right, bb_bottom = font.getbbox(glyph_char)
-        glyph_w = bb_right - bb_left
-        glyph_h = bb_bottom - bb_top
-        if glyph_w <= 0 or glyph_h <= 0:
+        glyph_img = _render_mdi_glyph(codepoint, size)
+        if glyph_img is None:
             return  # blank/invisible glyph — nothing to draw
 
-        # Render into an exact (glyph_w x glyph_h) grayscale scratch, offsetting
-        # by (-bb_left, -bb_top) so the ink starts at (0, 0) regardless of font-metric margins.
-        scratch = Image.new("L", (glyph_w, glyph_h), color=0)
-        ImageDraw.Draw(scratch).text((-bb_left, -bb_top), glyph_char, font=font, fill=255)
-
-        # Resize to exactly size x size (squeezes the non-square glyph into the
-        # declared square) and threshold back to 1-bit.
-        glyph_img: Image.Image = scratch.resize(
-            (size, size), resample=Image.Resampling.LANCZOS
-        ).point(lambda p: 1 if p > 127 else 0, "1")
-
-        # Paste fill color onto the canvas wherever the glyph has ink.
         fill_img = Image.new("1", (size, size), color=fill)
         canvas.paste(fill_img, (x, y), mask=glyph_img)
 
