@@ -156,14 +156,15 @@ def _render_mdi_glyph(codepoint: str, size: int) -> Image.Image | None:
     Returns ``None`` for blank/invisible glyphs (empty ink bounding box).
 
     MDI SVG viewports are square (24x24 units) but the TTF encoding is NOT:
-    the horizontal advance equals ``size`` while the vertical range is only
-    ~75-90% of ``size`` (cap-height / UPM ratio).  A small minority of icons
-    also have left < 0 or right > size (+-1 px overrun).  ``font.getbbox()``
-    is used to determine the exact ink extent so the minimal exact-sized
-    scratch image is allocated, avoiding any wasteful oversized scratch.
-    The glyph is rendered with a precise offset so ink starts at (0, 0),
-    then resized to ``size x size`` with Lanczos resampling and thresholded
-    back to 1-bit.
+    the horizontal advance equals ``size`` while the vertical ink range is only
+    ~75-90% of ``size`` (cap-height / UPM ratio).  Naively stretching the raw
+    ink bounding box to ``size x size`` would distort the icon proportions
+    (e.g. the home icon's 24x18 px ink would be stretched 1.33x taller).
+
+    Instead the glyph is scaled **uniformly** so its largest dimension fills
+    ``size`` pixels, then centred on the ``size x size`` output canvas.
+    All ink pixels remain within the declared square; the bounding-box
+    contract is therefore fully maintained.
     """
     font = _load_mdi_font(size)
     glyph_char = chr(int(codepoint, 16))
@@ -175,9 +176,22 @@ def _render_mdi_glyph(codepoint: str, size: int) -> Image.Image | None:
 
     scratch = Image.new("L", (glyph_w, glyph_h), color=0)
     ImageDraw.Draw(scratch).text((int(-bb[0]), int(-bb[1])), glyph_char, font=font, fill=255)
-    return scratch.resize((size, size), resample=Image.Resampling.LANCZOS).point(
-        lambda p: 1 if p > 127 else 0, "1"
-    )
+
+    # Scale uniformly so the largest dimension fills ``size`` pixels exactly,
+    # preserving the original aspect ratio (no distortion).
+    scale = min(size / glyph_w, size / glyph_h)
+    scaled_w = max(1, round(glyph_w * scale))
+    scaled_h = max(1, round(glyph_h * scale))
+    scaled = scratch.resize((scaled_w, scaled_h), resample=Image.Resampling.LANCZOS)
+
+    # Centre the scaled glyph on a size x size canvas so the output always
+    # occupies the declared square bounding box.
+    output = Image.new("L", (size, size), color=0)
+    offset_x = (size - scaled_w) // 2
+    offset_y = (size - scaled_h) // 2
+    output.paste(scaled, (offset_x, offset_y))
+
+    return output.point(lambda p: 1 if p > 127 else 0, "1")
 
 
 _INIT_SEQUENCE: tuple[int, ...] = (
@@ -623,13 +637,12 @@ class ArgonOledDevice:
     def _draw_icon(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Draw a Material Design Icon onto the framebuffer.
 
-        The icon is guaranteed to occupy exactly the ``size x size`` pixel square
+        All ink pixels are guaranteed to fit within the ``size x size`` square
         whose top-left corner is at ``(x, y)``.  For example ``x=10``, ``y=20``,
-        ``size=30`` places the icon inside ``(10, 20) -> (40, 50)``.
-
-        The heavy lifting (glyph metrics, scratch render, resize) is done by
-        ``_render_mdi_glyph()``.  See that function for the full explanation of
-        why the MDI TTF is not square despite the SVG viewport being 24x24.
+        ``size=30`` confines the icon to the region ``(10, 20) -> (39, 49)``.
+        The glyph is scaled uniformly (aspect ratio preserved) so its largest
+        dimension fills ``size`` pixels, then centred within the square —
+        no pixels escape the declared bounding box.
 
         * ``value`` — icon name, optionally prefixed with ``mdi:``
           (e.g. ``"mdi:home"`` or ``"home"``).  Required.
