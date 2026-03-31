@@ -30,12 +30,16 @@ from .const import (
     DEFAULT_I2C_BUS,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
+    ELEMENT_ARC,
+    ELEMENT_CIRCLE,
     ELEMENT_DLIMG,
-    ELEMENT_FILLED_RECTANGLE,
+    ELEMENT_ELLIPSE,
     ELEMENT_ICON,
     ELEMENT_LINE,
     ELEMENT_MULTILINE,
+    ELEMENT_PIESLICE,
     ELEMENT_PIXEL,
+    ELEMENT_POLYGON,
     ELEMENT_PROGRESS_BAR,
     ELEMENT_RECTANGLE,
     ELEMENT_TEXT,
@@ -55,6 +59,45 @@ _COLUMN_OFFSET = 2
 _PAGE_HEIGHT = 8
 _PAGE_COUNT = DISPLAY_HEIGHT // _PAGE_HEIGHT
 _WRITE_CHUNK = 16
+
+# Map user-friendly anchor names to Pillow's two-character anchor codes.
+# First character: horizontal (l=left, m=middle, r=right).
+# Second character: vertical (t=top, m=middle, b=bottom) — for single-line text.
+# multiline_text requires ascender/descender anchors (a/m/d); t→a and b→d are
+# translated at call-time in the ELEMENT_MULTILINE branch below.
+_ANCHOR_MAP: dict[str, str] = {
+    "lt": "lt",
+    "top-left": "lt",
+    "topleft": "lt",
+    "mt": "mt",
+    "top-center": "mt",
+    "topcenter": "mt",
+    "top": "mt",
+    "rt": "rt",
+    "top-right": "rt",
+    "topright": "rt",
+    "lm": "lm",
+    "middle-left": "lm",
+    "left": "lm",
+    "ml": "lm",
+    "mm": "mm",
+    "middle-center": "mm",
+    "center": "mm",
+    "middle": "mm",
+    "rm": "rm",
+    "middle-right": "rm",
+    "right": "rm",
+    "mr": "rm",
+    "lb": "lb",
+    "bottom-left": "lb",
+    "bottomleft": "lb",
+    "mb": "mb",
+    "bottom-center": "mb",
+    "bottom": "mb",
+    "rb": "rb",
+    "bottom-right": "rb",
+    "bottomright": "rb",
+}
 
 # Material Design Icons assets bundled with the integration.
 _ASSETS_DIR = Path(__file__).parent / "assets"
@@ -113,14 +156,15 @@ def _render_mdi_glyph(codepoint: str, size: int) -> Image.Image | None:
     Returns ``None`` for blank/invisible glyphs (empty ink bounding box).
 
     MDI SVG viewports are square (24x24 units) but the TTF encoding is NOT:
-    the horizontal advance equals ``size`` while the vertical range is only
-    ~75-90% of ``size`` (cap-height / UPM ratio).  A small minority of icons
-    also have left < 0 or right > size (+-1 px overrun).  ``font.getbbox()``
-    is used to determine the exact ink extent so the minimal exact-sized
-    scratch image is allocated, avoiding any wasteful oversized scratch.
-    The glyph is rendered with a precise offset so ink starts at (0, 0),
-    then resized to ``size x size`` with Lanczos resampling and thresholded
-    back to 1-bit.
+    the horizontal advance equals ``size`` while the vertical ink range is only
+    ~75-90% of ``size`` (cap-height / UPM ratio).  Naively stretching the raw
+    ink bounding box to ``size x size`` would distort the icon proportions
+    (e.g. the home icon's 24x18 px ink would be stretched 1.33x taller).
+
+    Instead the glyph is scaled **uniformly** so its largest dimension fills
+    ``size`` pixels, then centred on the ``size x size`` output canvas.
+    All ink pixels remain within the declared square; the bounding-box
+    contract is therefore fully maintained.
     """
     font = _load_mdi_font(size)
     glyph_char = chr(int(codepoint, 16))
@@ -132,9 +176,22 @@ def _render_mdi_glyph(codepoint: str, size: int) -> Image.Image | None:
 
     scratch = Image.new("L", (glyph_w, glyph_h), color=0)
     ImageDraw.Draw(scratch).text((int(-bb[0]), int(-bb[1])), glyph_char, font=font, fill=255)
-    return scratch.resize((size, size), resample=Image.Resampling.LANCZOS).point(
-        lambda p: 1 if p > 127 else 0, "1"
-    )
+
+    # Scale uniformly so the largest dimension fills ``size`` pixels exactly,
+    # preserving the original aspect ratio (no distortion).
+    scale = min(size / glyph_w, size / glyph_h)
+    scaled_w = max(1, round(glyph_w * scale))
+    scaled_h = max(1, round(glyph_h * scale))
+    scaled = scratch.resize((scaled_w, scaled_h), resample=Image.Resampling.LANCZOS)
+
+    # Centre the scaled glyph on a size x size canvas so the output always
+    # occupies the declared square bounding box.
+    output = Image.new("L", (size, size), color=0)
+    offset_x = (size - scaled_w) // 2
+    offset_y = (size - scaled_h) // 2
+    output.paste(scaled, (offset_x, offset_y))
+
+    return output.point(lambda p: 1 if p > 127 else 0, "1")
 
 
 _INIT_SEQUENCE: tuple[int, ...] = (
@@ -299,7 +356,7 @@ class ArgonOledDevice:
 
         self._retry(operation, context="draw")
 
-    def _draw_element(  # pylint: disable=too-many-locals,too-many-return-statements
+    def _draw_element(  # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
         self, drawer: ImageDraw.ImageDraw, canvas: Image.Image, element: dict[str, Any]
     ) -> None:
         """Draw one element onto the in-memory framebuffer."""
@@ -314,7 +371,8 @@ class ArgonOledDevice:
             x = self._clamp_x(element.get("x", 0))
             y = self._clamp_y(element.get("y", 0))
             value = str(element.get("value", ""))
-            drawer.text((x, y), value, font=font, fill=color)
+            anchor = _ANCHOR_MAP.get(str(element.get("anchor", "lt")).lower(), "lt")
+            drawer.text((x, y), value, font=font, fill=color, anchor=anchor)
             return
 
         if element_type == ELEMENT_MULTILINE:
@@ -326,7 +384,12 @@ class ArgonOledDevice:
             offset_y = int(element.get("offset_y", 0))
             lines = str(element.get("value", "")).split(delimiter)
             value = "\n".join(lines)
-            drawer.multiline_text((x, y + offset_y), value, font=font, fill=color, spacing=spacing)
+            _anchor = _ANCHOR_MAP.get(str(element.get("anchor", "lt")).lower(), "lt")
+            # multiline_text uses ascender/descender vertical anchors (a/m/d), not top/bottom (t/b).
+            anchor = _anchor[0] + {"t": "a", "b": "d"}.get(_anchor[1], _anchor[1])
+            drawer.multiline_text(
+                (x, y + offset_y), value, font=font, fill=color, spacing=spacing, anchor=anchor
+            )
             return
 
         if element_type == ELEMENT_LINE:
@@ -338,18 +401,36 @@ class ArgonOledDevice:
             drawer.line((x1, y1, x2, y2), fill=color, width=width)
             return
 
-        if element_type in (ELEMENT_RECTANGLE, ELEMENT_FILLED_RECTANGLE):
+        if element_type == ELEMENT_RECTANGLE:
             x1 = self._clamp_x(element.get("x_start", 0))
             y1 = self._clamp_y(element.get("y_start", 0))
             x2 = self._clamp_x(element.get("x_end", x1))
             y2 = self._clamp_y(element.get("y_end", y1))
-
-            if element_type == ELEMENT_RECTANGLE:
-                fill: int | None = color if bool(element.get("fill", False)) else None
-                drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill)
+            fill: int | None = color if bool(element.get("fill", False)) else None
+            width = max(1, int(element.get("width", 1)))
+            radius = max(0, int(element.get("radius", 0)))
+            if radius > 0:
+                drawer.rounded_rectangle(
+                    (x1, y1, x2, y2), radius=radius, outline=color, fill=fill, width=width
+                )
             else:
-                outline: int | None = color if bool(element.get("outline", True)) else None
-                drawer.rectangle((x1, y1, x2, y2), outline=outline, fill=color)
+                drawer.rectangle((x1, y1, x2, y2), outline=color, fill=fill, width=width)
+            return
+
+        if element_type == ELEMENT_POLYGON:
+            self._draw_polygon(drawer, element, color)
+            return
+
+        if element_type == ELEMENT_CIRCLE:
+            self._draw_circle(drawer, element, color)
+            return
+
+        if element_type == ELEMENT_ELLIPSE:
+            self._draw_ellipse(drawer, element, color)
+            return
+
+        if element_type in (ELEMENT_ARC, ELEMENT_PIESLICE):
+            self._draw_arc_or_pieslice(drawer, element, color, element_type)
             return
 
         if element_type == ELEMENT_PIXEL:
@@ -369,6 +450,97 @@ class ArgonOledDevice:
         if element_type == ELEMENT_ICON:
             self._draw_icon(canvas, element)
             return
+
+    def _draw_polygon(
+        self, drawer: ImageDraw.ImageDraw, element: dict[str, Any], color: int
+    ) -> None:
+        """Draw a polygon element.
+
+        ``points`` is a flat list of coordinate values or a list of [x, y] pairs.
+        Each coordinate supports pixels or a percentage string (e.g. ``"50%"``).
+        ``fill: true`` fills the interior with *color*.
+        ``width`` controls the outline thickness (default ``1``).
+        """
+        raw_points = element.get("points", [])
+        flat: list[int] = []
+        if raw_points and isinstance(raw_points[0], (list, tuple)):
+            for pair in raw_points:
+                flat.append(self._clamp_x(pair[0]))
+                flat.append(self._clamp_y(pair[1]))
+        else:
+            for i, val in enumerate(raw_points):
+                flat.append(self._clamp_x(val) if i % 2 == 0 else self._clamp_y(val))
+        if len(flat) < 4:
+            return
+        fill: int | None = color if bool(element.get("fill", False)) else None
+        width = max(1, int(element.get("width", 1)))
+        drawer.polygon(flat, outline=color, fill=fill, width=width)
+
+    def _draw_circle(
+        self, drawer: ImageDraw.ImageDraw, element: dict[str, Any], color: int
+    ) -> None:
+        """Draw a circle element.
+
+        ``x`` and ``y`` are the centre coordinates; ``radius`` is the circle radius.
+        All three accept pixels or percentage strings.
+        ``fill: true`` fills the circle; ``width`` controls outline thickness.
+        """
+        cx = self._clamp_x(element.get("x", 0))
+        cy = self._clamp_y(element.get("y", 0))
+        r = self._resolve_radius(element.get("radius", 10))
+        x1, y1 = cx - r, cy - r
+        x2, y2 = cx + r, cy + r
+        fill: int | None = color if bool(element.get("fill", False)) else None
+        width = max(1, int(element.get("width", 1)))
+        drawer.ellipse((x1, y1, x2, y2), outline=color, fill=fill, width=width)
+
+    def _draw_ellipse(
+        self, drawer: ImageDraw.ImageDraw, element: dict[str, Any], color: int
+    ) -> None:
+        """Draw an ellipse element defined by its bounding box.
+
+        ``x_start``, ``y_start``, ``x_end``, ``y_end`` mark the bounding box corners.
+        All coordinates accept pixels or percentage strings.
+        ``fill: true`` fills the ellipse; ``width`` controls outline thickness.
+        """
+        x1 = self._clamp_x(element.get("x_start", 0))
+        y1 = self._clamp_y(element.get("y_start", 0))
+        x2 = self._clamp_x(element.get("x_end", x1))
+        y2 = self._clamp_y(element.get("y_end", y1))
+        fill: int | None = color if bool(element.get("fill", False)) else None
+        width = max(1, int(element.get("width", 1)))
+        drawer.ellipse((x1, y1, x2, y2), outline=color, fill=fill, width=width)
+
+    def _draw_arc_or_pieslice(  # pylint: disable=too-many-locals
+        self,
+        drawer: ImageDraw.ImageDraw,
+        element: dict[str, Any],
+        color: int,
+        element_type: str,
+    ) -> None:
+        """Draw an arc or pie-slice element defined by a bounding box and angles.
+
+        ``x_start``, ``y_start``, ``x_end``, ``y_end`` mark the bounding box.
+        ``start`` and ``end`` are angles in degrees (0 = right, 90 = down) or
+        percentage strings (``"25%"`` = 90°).
+        All coordinates accept pixels or percentage strings.
+        ``fill: true`` fills the pie slice (ignored for ``arc``).
+        ``width`` controls the line thickness (default ``1``).
+        """
+        x1 = self._clamp_x(element.get("x_start", 0))
+        y1 = self._clamp_y(element.get("y_start", 0))
+        x2 = self._clamp_x(element.get("x_end", x1))
+        y2 = self._clamp_y(element.get("y_end", y1))
+        start = self._resolve_angle(element.get("start", 0))
+        end = self._resolve_angle(element.get("end", 180))
+        width = max(1, int(element.get("width", 1)))
+        if element_type == ELEMENT_ARC:
+            drawer.arc((x1, y1, x2, y2), start=start, end=end, fill=color, width=width)
+        else:
+            fill_color: int | None = color if bool(element.get("fill", False)) else None
+            drawer.pieslice(
+                (x1, y1, x2, y2), start=start, end=end, outline=color, fill=fill_color, width=width
+            )
 
     def _draw_image(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Render a source image onto the framebuffer with clipping."""
@@ -471,13 +643,12 @@ class ArgonOledDevice:
     def _draw_icon(self, canvas: Image.Image, element: dict[str, Any]) -> None:
         """Draw a Material Design Icon onto the framebuffer.
 
-        The icon is guaranteed to occupy exactly the ``size x size`` pixel square
+        All ink pixels are guaranteed to fit within the ``size x size`` square
         whose top-left corner is at ``(x, y)``.  For example ``x=10``, ``y=20``,
-        ``size=30`` places the icon inside ``(10, 20) -> (40, 50)``.
-
-        The heavy lifting (glyph metrics, scratch render, resize) is done by
-        ``_render_mdi_glyph()``.  See that function for the full explanation of
-        why the MDI TTF is not square despite the SVG viewport being 24x24.
+        ``size=30`` confines the icon to the region ``(10, 20) -> (39, 49)``.
+        The glyph is scaled uniformly (aspect ratio preserved) so its largest
+        dimension fills ``size`` pixels, then centred within the square —
+        no pixels escape the declared bounding box.
 
         * ``value`` — icon name, optionally prefixed with ``mdi:``
           (e.g. ``"mdi:home"`` or ``"home"``).  Required.
@@ -681,11 +852,43 @@ class ArgonOledDevice:
         return 0 if str(element.get(key, default)).lower() == COLOR_BLACK else 1
 
     @staticmethod
+    def _resolve_radius(value: Any) -> int:
+        """Resolve a radius value; accepts pixels or a ``"N%"`` string.
+
+        Percentage is relative to ``min(DISPLAY_WIDTH, DISPLAY_HEIGHT)`` (= 64).
+        """
+        ref = min(DISPLAY_WIDTH, DISPLAY_HEIGHT)
+        if isinstance(value, str):
+            s = value.strip()
+            if s.endswith("%"):
+                return max(0, round(float(s[:-1]) / 100.0 * ref))
+        return max(0, int(value))
+
+    @staticmethod
+    def _resolve_angle(value: Any) -> float:
+        """Resolve an angle value; accepts degrees or a ``"N%"`` string (% of 360°)."""
+        if isinstance(value, str):
+            s = value.strip()
+            if s.endswith("%"):
+                return float(s[:-1]) / 100.0 * 360.0
+        return float(value)
+
+    @staticmethod
     def _clamp_x(value: Any) -> int:
-        """Clamp an x coordinate to display bounds."""
+        """Resolve and clamp an x coordinate; accepts pixels or a ``"N%"`` string."""
+        if isinstance(value, str):
+            s = value.strip()
+            if s.endswith("%"):
+                return max(0, min(DISPLAY_WIDTH - 1, round(float(s[:-1]) / 100.0 * DISPLAY_WIDTH)))
         return max(0, min(DISPLAY_WIDTH - 1, int(value)))
 
     @staticmethod
     def _clamp_y(value: Any) -> int:
-        """Clamp a y coordinate to display bounds."""
+        """Resolve and clamp a y coordinate; accepts pixels or a ``"N%"`` string."""
+        if isinstance(value, str):
+            s = value.strip()
+            if s.endswith("%"):
+                return max(
+                    0, min(DISPLAY_HEIGHT - 1, round(float(s[:-1]) / 100.0 * DISPLAY_HEIGHT))
+                )
         return max(0, min(DISPLAY_HEIGHT - 1, int(value)))

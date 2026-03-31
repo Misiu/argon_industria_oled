@@ -55,17 +55,18 @@ def test_text_over_filled_rectangle(
 ) -> None:
     """Drawing a white filled rectangle then black text over it changes the text area."""
     image, draw = black_canvas
-    # Step 1: white filled rectangle
+    # Step 1: white filled rectangle (rectangle + fill=True replaces filled_rectangle)
     draw_element(
         device,
         image,
         draw,
         {
-            "type": "filled_rectangle",
+            "type": "rectangle",
             "x_start": 0,
             "y_start": 0,
             "x_end": 60,
             "y_end": 20,
+            "fill": True,
             "color": "white",
         },
     )
