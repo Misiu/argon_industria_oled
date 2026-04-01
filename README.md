@@ -136,15 +136,69 @@ Draws a single line of text at the specified position.
 | `x`       | X position         | Yes      | —          | Pixels or `"N%"`                                             |
 | `y`       | Y position         | Yes      | —          | Pixels or `"N%"`                                             |
 | `size`    | Font size          | No       | `20`       | Pixels                                                       |
-| `anchor`  | Reference point    | No       | `lt`       | `lt` top-left · `mm`/`center` middle · `rb` bottom-right … |
+| `anchor`  | Reference point    | No       | `lt`       | Only effective when `width` and `height` are set (see below) |
+| `width`   | Bounding box width | No       | —          | Pixels; enables anchor-based placement                       |
+| `height`  | Bounding box height| No       | —          | Pixels; enables anchor-based placement                       |
+| `color`   | Text color         | No       | `white`    | `white` or `black`                                           |
 
 ```yaml
 - type: text
   value: "CPU 42C"
-  x: "50%"
-  y: "50%"
+  x: 2
+  y: 2
   size: 14
-  anchor: center   # centred on screen
+```
+
+#### Bounding-box anchor
+
+When both `width` and `height` are provided, they define a rectangular region
+starting at (`x`, `y`).  The `anchor` parameter then controls where inside that
+region the text is placed:
+
+![text anchor grid](tests/images/type_text_anchors.png)
+
+| Anchor | Alias          | Position in box          |
+|--------|----------------|--------------------------|
+| `lt`   | `top-left`     | Top-left corner          |
+| `mt`   | `top-center`   | Top edge, centered       |
+| `rt`   | `top-right`    | Top-right corner         |
+| `lm`   | `middle-left`  | Left edge, centered      |
+| `mm`   | `center`       | Center of box            |
+| `rm`   | `middle-right` | Right edge, centered     |
+| `lb`   | `bottom-left`  | Bottom-left corner       |
+| `mb`   | `bottom-center`| Bottom edge, centered    |
+| `rb`   | `bottom-right` | Bottom-right corner      |
+
+```yaml
+# Text centered inside a 50x20 box that starts at (8, 8)
+- type: text
+  value: "Hello"
+  x: 8
+  y: 8
+  width: 50
+  height: 20
+  size: 12
+  anchor: center
+
+# Top-left aligned inside a box
+- type: text
+  value: "TL"
+  x: 8
+  y: 8
+  width: 50
+  height: 20
+  size: 12
+  anchor: lt
+
+# Bottom-right aligned inside a box
+- type: text
+  value: "BR"
+  x: 8
+  y: 8
+  width: 50
+  height: 20
+  size: 12
+  anchor: rb
 ```
 
 ---

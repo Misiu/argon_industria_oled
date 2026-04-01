@@ -81,6 +81,60 @@ def test_image_type_text() -> None:
     assert region_has_white(img, 2, 42, 126, 58)  # line 3
 
 
+def test_image_type_text_anchors() -> None:
+    """Render a 3x3 grid of bounding boxes with text at all 9 anchor positions.
+
+    Saves type_text_anchors.png as a visual reference for the width/height anchor feature.
+    Each cell shows a rectangle outline (the bounding box) and the anchor label positioned
+    inside using the corresponding anchor value.
+    """
+    box_w, box_h = 38, 18
+    col_x = [2, 44, 86]
+    row_y = [2, 23, 44]
+    font_size = 9
+    anchors_grid = [
+        ["lt", "mt", "rt"],
+        ["lm", "mm", "rm"],
+        ["lb", "mb", "rb"],
+    ]
+
+    elements: list[dict[str, Any]] = []
+    for row_idx, row in enumerate(anchors_grid):
+        for col_idx, anchor in enumerate(row):
+            bx = col_x[col_idx]
+            by = row_y[row_idx]
+            elements.append(
+                {
+                    "type": "rectangle",
+                    "x_start": bx,
+                    "y_start": by,
+                    "x_end": bx + box_w - 1,
+                    "y_end": by + box_h - 1,
+                }
+            )
+            elements.append(
+                {
+                    "type": "text",
+                    "value": anchor,
+                    "x": bx,
+                    "y": by,
+                    "width": box_w,
+                    "height": box_h,
+                    "size": font_size,
+                    "anchor": anchor,
+                }
+            )
+
+    img = _render(*elements)
+    _save(img, "type_text_anchors")
+    # Every cell must have white pixels (rectangle outline + text label).
+    for row_idx in range(3):
+        for col_idx in range(3):
+            bx = col_x[col_idx]
+            by = row_y[row_idx]
+            assert region_has_white(img, bx, by, bx + box_w - 1, by + box_h - 1)
+
+
 # ---------------------------------------------------------------------------
 # type: multiline
 # ---------------------------------------------------------------------------
