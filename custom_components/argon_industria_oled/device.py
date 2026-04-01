@@ -372,7 +372,18 @@ class ArgonOledDevice:
             y = self._clamp_y(element.get("y", 0))
             value = str(element.get("value", ""))
             anchor = _ANCHOR_MAP.get(str(element.get("anchor", "lt")).lower(), "lt")
-            drawer.text((x, y), value, font=font, fill=color, anchor=anchor)
+            raw_width = element.get("width")
+            raw_height = element.get("height")
+            if raw_width is not None and raw_height is not None:
+                w = max(1, int(raw_width))
+                h = max(1, int(raw_height))
+                horiz = anchor[0]  # l / m / r
+                vert = anchor[1]  # t / m / b
+                tx = x if horiz == "l" else (x + w // 2 if horiz == "m" else x + w)
+                ty = y if vert == "t" else (y + h // 2 if vert == "m" else y + h)
+                drawer.text((tx, ty), value, font=font, fill=color, anchor=anchor)
+            else:
+                drawer.text((x, y), value, font=font, fill=color, anchor=anchor)
             return
 
         if element_type == ELEMENT_MULTILINE:
