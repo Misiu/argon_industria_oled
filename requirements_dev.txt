@@ -3,5 +3,5 @@ pylint==4.0.5
 mypy==1.20.0
 ruff==0.15.10
 pytest==9.0.2
-Pillow==12.1.1
+Pillow==12.2.0
 smbus2==0.6.0
