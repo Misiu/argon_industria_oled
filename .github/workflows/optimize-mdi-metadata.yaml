@@ -63,6 +63,13 @@ jobs:
           echo "saved=$SAVED" >> "$GITHUB_OUTPUT"
           echo "pct=$PCT" >> "$GITHUB_OUTPUT"
 
+      - name: Sanitize base branch name
+        if: steps.changes.outputs.changed == 'true'
+        id: branch_name
+        run: |
+          sanitized_ref="${GITHUB_REF_NAME//\//-}"
+          echo "sanitized_ref=$sanitized_ref" >> "$GITHUB_OUTPUT"
+
       - name: Create Pull Request
         if: steps.changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8.1.1
@@ -86,7 +93,7 @@ jobs:
 
             *This PR was automatically created by the [optimize-mdi-metadata](${{ github.server_url }}/${{ github.repository }}/actions/workflows/optimize-mdi-metadata.yaml) workflow*
           base: ${{ github.ref_name }}
-          branch: automated/optimize-mdi-metadata-${{ replace(github.ref_name, '/', '-') }}
+          branch: automated/optimize-mdi-metadata-${{ steps.branch_name.outputs.sanitized_ref }}
           delete-branch: true
           add-paths: |
             custom_components/argon_industria_oled/assets/materialdesignicons.meta.json
