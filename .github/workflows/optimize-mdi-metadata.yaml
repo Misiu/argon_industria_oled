@@ -86,7 +86,7 @@ jobs:
 
             *This PR was automatically created by the [optimize-mdi-metadata](${{ github.server_url }}/${{ github.repository }}/actions/workflows/optimize-mdi-metadata.yaml) workflow*
           base: ${{ github.ref_name }}
-          branch: automated/optimize-mdi-metadata-${{ github.ref_name }}
+          branch: automated/optimize-mdi-metadata-${{ replace(github.ref_name, '/', '-') }}
           delete-branch: true
           add-paths: |
             custom_components/argon_industria_oled/assets/materialdesignicons.meta.json
