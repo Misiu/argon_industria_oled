@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 SOURCE_URL = (
     "https://raw.githubusercontent.com/OpenDisplay/Home_Assistant_Integration/"
@@ -46,10 +46,21 @@ def _optimize_meta(entries: list[dict[str, object]]) -> dict[str, str]:
 def _load_source_json(source_url: str) -> list[dict[str, object]]:
     """Download and parse the upstream metadata JSON."""
     try:
-        with urlopen(source_url, timeout=30) as response:
-            status = getattr(response, "status", 200)
-            if status >= 400:
+        request = Request(source_url, headers={"Accept": "application/json"})
+        with urlopen(request, timeout=30) as response:
+            status = response.getcode()
+            if status is not None and status >= 400:
                 msg = f"Source URL returned HTTP status {status}"
+                raise RuntimeError(msg)
+
+            content_type = response.headers.get_content_type()
+            allowed_content_types = {
+                "application/json",
+                "application/octet-stream",
+                "text/plain",
+            }
+            if content_type not in allowed_content_types:
+                msg = f"Unexpected content type: {content_type}"
                 raise RuntimeError(msg)
 
             raw_json = json.load(response)
