@@ -13,7 +13,7 @@ DEFAULT_OUTPUT_PATH = (
     / "assets"
     / "materialdesignicons.meta.json"
 )
-SOURCE_PATH = DEFAULT_OUTPUT_PATH
+DEFAULT_SOURCE_PATH = DEFAULT_OUTPUT_PATH
 
 
 def _optimize_meta(raw_meta: list[dict[str, object]] | dict[str, object]) -> dict[str, str]:
@@ -75,7 +75,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--source",
         type=Path,
-        default=SOURCE_PATH,
+        default=DEFAULT_SOURCE_PATH,
         help="Source metadata JSON path (defaults to in-place optimization).",
     )
     parser.add_argument(

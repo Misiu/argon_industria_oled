@@ -130,7 +130,7 @@ def _get_mdi_index() -> dict[str, str]:
         invalid_entries = len(raw_meta) - len(dict_index)
         if invalid_entries > 0:
             _LOGGER.warning(
-                "Ignored %d invalid entries in materialdesignicons.meta.json",
+                "Ignored %d invalid entries in materialdesignicons.meta.json (optimized format)",
                 invalid_entries,
             )
         return dict_index
