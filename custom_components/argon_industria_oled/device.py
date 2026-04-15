@@ -129,7 +129,9 @@ def _get_mdi_index() -> dict[str, str]:
         }
 
     if not isinstance(raw_meta, list):
-        _LOGGER.error("Unexpected materialdesignicons.meta.json format: %s", type(raw_meta).__name__)
+        _LOGGER.error(
+            "Unexpected materialdesignicons.meta.json format: %s", type(raw_meta).__name__
+        )
         return {}
 
     index: dict[str, str] = {}

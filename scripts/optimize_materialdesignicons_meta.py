@@ -44,7 +44,7 @@ def _optimize_meta(entries: list[dict[str, object]]) -> dict[str, str]:
 
 def _load_source_json(source_url: str) -> list[dict[str, object]]:
     """Download and parse the upstream metadata JSON."""
-    with urlopen(source_url, timeout=30) as response:  # noqa: S310
+    with urlopen(source_url, timeout=30) as response:
         raw_json = json.load(response)
 
     if not isinstance(raw_json, list):
