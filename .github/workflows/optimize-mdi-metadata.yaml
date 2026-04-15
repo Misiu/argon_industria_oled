@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      PR_AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
+      PR_AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
 
     steps:
       - name: Checkout repository
