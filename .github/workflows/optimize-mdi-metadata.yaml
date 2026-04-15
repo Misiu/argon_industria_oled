@@ -70,6 +70,24 @@ jobs:
           sanitized_ref="${GITHUB_REF_NAME//\//-}"
           echo "sanitized_ref=$sanitized_ref" >> "$GITHUB_OUTPUT"
 
+      - name: Close existing automated PRs
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing_prs=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "automated/optimize-mdi-metadata-${{ steps.branch_name.outputs.sanitized_ref }}" \
+            --state open \
+            --json number \
+            --jq '.[].number')
+          for pr_number in $existing_prs; do
+            echo "Closing existing PR #$pr_number"
+            gh pr close "$pr_number" \
+              --repo "${{ github.repository }}" \
+              --comment "Superseded by a newer automated update."
+          done
+
       - name: Create Pull Request
         if: steps.changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8.1.1
