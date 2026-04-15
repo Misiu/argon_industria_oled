@@ -16,6 +16,8 @@ jobs:
   optimize-mdi-metadata:
     name: Optimize MDI metadata
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout repository
@@ -61,6 +63,13 @@ jobs:
           echo "saved=$SAVED" >> "$GITHUB_OUTPUT"
           echo "pct=$PCT" >> "$GITHUB_OUTPUT"
 
+      - name: Sanitize base branch name
+        if: steps.changes.outputs.changed == 'true'
+        id: branch_name
+        run: |
+          sanitized_ref="${GITHUB_REF_NAME//\//-}"
+          echo "sanitized_ref=$sanitized_ref" >> "$GITHUB_OUTPUT"
+
       - name: Close existing automated PRs
         if: steps.changes.outputs.changed == 'true'
         env:
@@ -68,7 +77,7 @@ jobs:
         run: |
           existing_prs=$(gh pr list \
             --repo "${{ github.repository }}" \
-            --head "automated/optimize-mdi-metadata" \
+            --head "automated/optimize-mdi-metadata-${{ steps.branch_name.outputs.sanitized_ref }}" \
             --state open \
             --json number \
             --jq '.[].number')
@@ -81,7 +90,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.changes.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7.0.8
+        uses: peter-evans/create-pull-request@v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: optimize materialdesignicons.meta.json"
@@ -101,7 +110,8 @@ jobs:
             ---
 
             *This PR was automatically created by the [optimize-mdi-metadata](${{ github.server_url }}/${{ github.repository }}/actions/workflows/optimize-mdi-metadata.yaml) workflow*
-          branch: automated/optimize-mdi-metadata
+          base: ${{ github.ref_name }}
+          branch: automated/optimize-mdi-metadata-${{ steps.branch_name.outputs.sanitized_ref }}
           delete-branch: true
           add-paths: |
             custom_components/argon_industria_oled/assets/materialdesignicons.meta.json
