@@ -122,11 +122,18 @@ def _get_mdi_index() -> dict[str, str]:
         return {}
 
     if isinstance(raw_meta, dict):
-        return {
+        dict_index = {
             name: codepoint
             for name, codepoint in raw_meta.items()
             if isinstance(name, str) and isinstance(codepoint, str)
         }
+        invalid_entries = len(raw_meta) - len(dict_index)
+        if invalid_entries > 0:
+            _LOGGER.warning(
+                "Ignored %d invalid entries in materialdesignicons.meta.json",
+                invalid_entries,
+            )
+        return dict_index
 
     if not isinstance(raw_meta, list):
         _LOGGER.error(

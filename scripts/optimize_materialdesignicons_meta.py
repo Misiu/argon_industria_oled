@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 SOURCE_URL = (
@@ -44,8 +45,17 @@ def _optimize_meta(entries: list[dict[str, object]]) -> dict[str, str]:
 
 def _load_source_json(source_url: str) -> list[dict[str, object]]:
     """Download and parse the upstream metadata JSON."""
-    with urlopen(source_url, timeout=30) as response:
-        raw_json = json.load(response)
+    try:
+        with urlopen(source_url, timeout=30) as response:
+            status = getattr(response, "status", 200)
+            if status >= 400:
+                msg = f"Source URL returned HTTP status {status}"
+                raise RuntimeError(msg)
+
+            raw_json = json.load(response)
+    except (HTTPError, URLError, TimeoutError, OSError) as err:
+        msg = f"Failed to download source metadata: {err}"
+        raise RuntimeError(msg) from err
 
     if not isinstance(raw_json, list):
         msg = "Source JSON must be a list of icon entries"
@@ -83,7 +93,7 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        json.dumps(optimized, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+        json.dumps(optimized, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
     print(f"Wrote {len(optimized)} names/aliases to {args.output}")
