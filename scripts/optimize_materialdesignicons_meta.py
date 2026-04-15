@@ -5,14 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-SOURCE_URL = (
-    "https://raw.githubusercontent.com/OpenDisplay/Home_Assistant_Integration/"
-    "refs/heads/main/custom_components/opendisplay/imagegen/assets/"
-    "materialdesignicons-webfont_meta.json"
-)
 DEFAULT_OUTPUT_PATH = (
     Path(__file__).resolve().parents[1]
     / "custom_components"
@@ -20,12 +13,20 @@ DEFAULT_OUTPUT_PATH = (
     / "assets"
     / "materialdesignicons.meta.json"
 )
+SOURCE_PATH = DEFAULT_OUTPUT_PATH
 
 
-def _optimize_meta(entries: list[dict[str, object]]) -> dict[str, str]:
-    """Flatten icon names and aliases into a single name -> codepoint mapping."""
+def _optimize_meta(raw_meta: list[dict[str, object]] | dict[str, object]) -> dict[str, str]:
+    """Normalize metadata into a flat name/alias -> codepoint mapping."""
     optimized: dict[str, str] = {}
-    for entry in entries:
+
+    if isinstance(raw_meta, dict):
+        for name, codepoint in raw_meta.items():
+            if isinstance(name, str) and isinstance(codepoint, str):
+                optimized[name] = codepoint
+        return dict(sorted(optimized.items()))
+
+    for entry in raw_meta:
         name = entry.get("name")
         codepoint = entry.get("codepoint")
         if not isinstance(name, str) or not isinstance(codepoint, str):
@@ -43,34 +44,23 @@ def _optimize_meta(entries: list[dict[str, object]]) -> dict[str, str]:
     return dict(sorted(optimized.items()))
 
 
-def _load_source_json(source_url: str) -> list[dict[str, object]]:
-    """Download and parse the upstream metadata JSON."""
+def _load_source_json(source_path: Path) -> list[dict[str, object]] | dict[str, object]:
+    """Read and parse the source metadata JSON from disk."""
     try:
-        request = Request(source_url, headers={"Accept": "application/json"})
-        with urlopen(request, timeout=30) as response:
-            status = response.getcode()
-            if status is not None and status >= 400:
-                msg = f"Source URL returned HTTP status {status}"
-                raise RuntimeError(msg)
-
-            content_type = response.headers.get_content_type()
-            allowed_content_types = {
-                "application/json",
-                "application/octet-stream",
-                "text/plain",
-            }
-            if content_type not in allowed_content_types:
-                msg = f"Unexpected content type: {content_type}"
-                raise RuntimeError(msg)
-
-            raw_json = json.load(response)
-    except (HTTPError, URLError, TimeoutError, OSError) as err:
-        msg = f"Failed to download source metadata: {err}"
+        raw_json = json.loads(source_path.read_text(encoding="utf-8"))
+    except OSError as err:
+        msg = f"Failed to read source metadata file: {err}"
+        raise RuntimeError(msg) from err
+    except json.JSONDecodeError as err:
+        msg = f"Failed to parse source metadata JSON: {err}"
         raise RuntimeError(msg) from err
 
-    if not isinstance(raw_json, list):
-        msg = "Source JSON must be a list of icon entries"
+    if not isinstance(raw_json, (list, dict)):
+        msg = "Source JSON must be a list or dict"
         raise ValueError(msg)
+
+    if isinstance(raw_json, dict):
+        return raw_json
 
     entries: list[dict[str, object]] = []
     for item in raw_json:
@@ -81,10 +71,13 @@ def _load_source_json(source_url: str) -> list[dict[str, object]]:
 
 def _build_argument_parser() -> argparse.ArgumentParser:
     """Create the command-line parser for metadata optimization."""
-    parser = argparse.ArgumentParser(
-        description="Download and optimize Material Design Icons metadata."
+    parser = argparse.ArgumentParser(description="Optimize local Material Design Icons metadata.")
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=SOURCE_PATH,
+        help="Source metadata JSON path (defaults to in-place optimization).",
     )
-    parser.add_argument("--source-url", default=SOURCE_URL, help="Source metadata URL.")
     parser.add_argument(
         "--output",
         type=Path,
@@ -99,7 +92,7 @@ def main() -> None:
     parser = _build_argument_parser()
     args = parser.parse_args()
 
-    entries = _load_source_json(args.source_url)
+    entries = _load_source_json(args.source)
     optimized = _optimize_meta(entries)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
