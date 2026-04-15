@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      PR_AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -73,7 +74,7 @@ jobs:
       - name: Close existing automated PRs
         if: steps.changes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ env.PR_AUTOMATION_TOKEN }}
         run: |
           existing_prs=$(gh pr list \
             --repo "${{ github.repository }}" \
@@ -92,7 +93,7 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8.1.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ env.PR_AUTOMATION_TOKEN }}
           commit-message: "chore: optimize materialdesignicons.meta.json"
           title: "chore: Optimize MDI metadata"
           body: |
