@@ -107,26 +107,56 @@ _MDI_META_PATH = _ASSETS_DIR / "materialdesignicons.meta.json"
 
 @lru_cache(maxsize=1)
 def _get_mdi_index() -> dict[str, str]:
-    """Build and cache a flat name/alias -> hex-codepoint mapping from meta.json.
+    """Load and cache the MDI name/alias -> hex-codepoint mapping from meta.json.
 
-    Loaded once on first call; subsequent calls return the cached dict in O(1).
-    Primary icon names always win over aliases (``setdefault`` is used for aliases
-    so a later primary entry cannot overwrite an earlier one's alias mapping).
+    Supports both the optimized flat ``dict[str, str]`` format and the legacy
+    list-of-entries format. Loaded once on first call; subsequent calls return
+    the cached dict in O(1).
     Returns an empty dict and logs an error when the asset file is unreadable.
     """
     try:
         with _MDI_META_PATH.open(encoding="utf-8") as fh:
-            entries: list[dict[str, Any]] = json.load(fh)
+            raw_meta: Any = json.load(fh)
     except (OSError, json.JSONDecodeError) as err:
         _LOGGER.error("Failed to load materialdesignicons.meta.json: %s", err)
         return {}
 
+    if isinstance(raw_meta, dict):
+        dict_index = {
+            name: codepoint
+            for name, codepoint in raw_meta.items()
+            if isinstance(name, str) and isinstance(codepoint, str)
+        }
+        invalid_entries = len(raw_meta) - len(dict_index)
+        if invalid_entries > 0:
+            _LOGGER.warning(
+                "Ignored %d invalid entries in materialdesignicons.meta.json (optimized format)",
+                invalid_entries,
+            )
+        return dict_index
+
+    if not isinstance(raw_meta, list):
+        _LOGGER.error(
+            "Unexpected materialdesignicons.meta.json format: %s", type(raw_meta).__name__
+        )
+        return {}
+
     index: dict[str, str] = {}
-    for entry in entries:
-        codepoint: str = entry["codepoint"]
-        index[entry["name"]] = codepoint
-        for alias in entry.get("aliases", []):
-            index.setdefault(alias, codepoint)
+    for entry in raw_meta:
+        if not isinstance(entry, dict):
+            continue
+
+        name = entry.get("name")
+        codepoint = entry.get("codepoint")
+        if not isinstance(name, str) or not isinstance(codepoint, str):
+            continue
+
+        index[name] = codepoint
+        aliases = entry.get("aliases", [])
+        if isinstance(aliases, list):
+            for alias in aliases:
+                if isinstance(alias, str):
+                    index.setdefault(alias, codepoint)
     return index
 
 
