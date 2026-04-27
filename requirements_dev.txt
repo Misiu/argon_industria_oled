@@ -1,4 +1,4 @@
-homeassistant==2026.4.1
+homeassistant==2026.4.4
 pylint==4.0.5
 mypy==1.20.0
 ruff==0.15.10
