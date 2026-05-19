@@ -10,7 +10,7 @@
   "issue_tracker": "https://github.com/Misiu/argon_industria_oled/issues",
   "requirements": [
     "gpiod>=2.2.1",
-    "pillow==12.1.1",
+    "pillow==12.2.0",
     "smbus2==0.6.0"
   ],
   "single_config_entry": true,
