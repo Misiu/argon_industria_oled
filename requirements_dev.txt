@@ -1,7 +1,7 @@
 homeassistant==2026.5.2
 pylint==4.0.5
 mypy==2.1.0
-ruff==0.15.13
+ruff==0.15.14
 pytest==9.0.3
 Pillow==12.2.0
 smbus2==0.6.1
